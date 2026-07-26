@@ -1,0 +1,31 @@
+/*
+ * BBS 社区插件 Console/UC 设计 token。
+ * 中性色与圆角对齐 Halo 后台官方值（卡片描边 #eaecf0、圆角 4px、150ms 过渡），
+ * 强调色用于插件自绘展示层（徽标 / 磁贴）。
+ */
+:root {
+  --bbs-accent: #6366f1;
+  --bbs-accent-bg: rgba(99, 102, 241, 0.1);
+
+  --bbs-border: #eaecf0;
+  --bbs-bg-soft: #f9fafb;
+  --bbs-bg-hover: #f9fafb;
+  --bbs-bg-selected: #f3f4f6;
+
+  --bbs-text: #111827;
+  --bbs-text-muted: #6b7280;
+  --bbs-text-faint: #9ca3af;
+
+  --bbs-info: #0284c7;
+  --bbs-info-bg: #f0f9ff;
+  --bbs-success: #16a34a;
+  --bbs-success-bg: #f0fdf4;
+  --bbs-warning: #d97706;
+  --bbs-warning-bg: #fffbeb;
+  --bbs-danger: #d71d1d;
+  --bbs-danger-bg: #fef2f2;
+
+  --bbs-radius: 4px;
+  --bbs-radius-lg: 10px;
+  --bbs-transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}

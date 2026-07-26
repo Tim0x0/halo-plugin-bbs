@@ -1,0 +1,1065 @@
+/* ============================================================
+   BBS 社区前台样式 v3 —— Flarum 骨架 + Discourse 信息密度
+   布局：品牌色顶栏+Hero / 左侧分类导航 / 主列表（48px 头像行 +
+   标签 chips + 回复数）；Hero 颜色随插件设置的主题色。
+   ============================================================ */
+
+:root {
+  --b-accent: #4d698e;
+  --b-bg: #f7f8f9;
+  --b-panel: #ffffff;
+  --b-line: #e8eaed;
+  --b-text: #111111;
+  --b-text-2: #667380;
+  --b-text-3: #9aa4ae;
+  --b-amber: #b8860b;
+  --b-tr: all 0.15s ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --b-bg: #121417;
+    --b-panel: #1b1e23;
+    --b-line: #2a2e35;
+    --b-text: #eceef1;
+    --b-text-2: #a8b0ba;
+    --b-text-3: #666e79;
+    --b-amber: #d9a52a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.bbs-body {
+  margin: 0;
+  background: var(--b-bg);
+  color: var(--b-text);
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ---------------- 顶栏 + Hero（品牌色区） ---------------- */
+
+.bbs-hd {
+  background: var(--b-accent);
+}
+
+.bbs-hd__in {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 20px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.bbs-lg {
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.bbs-lg__mark {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.22);
+  display: grid;
+  place-items: center;
+}
+
+.bbs-lg__mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+.bbs-lg__img {
+  flex: none;
+  height: 28px;
+  width: auto;
+  max-width: 140px;
+  border-radius: 6px;
+  display: block;
+  object-fit: contain;
+}
+
+.bbs-hs {
+  position: relative;
+  flex: 0 1 260px;
+}
+
+.bbs-hs input[type="search"] {
+  width: 100%;
+  height: 32px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 0 14px 0 32px;
+  font-size: 13px;
+  outline: none;
+  transition: var(--b-tr);
+}
+
+.bbs-hs input[type="search"]::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.bbs-hs input[type="search"]:focus {
+  background: rgba(255, 255, 255, 0.96);
+  color: #333;
+}
+
+.bbs-hs input[type="search"]:focus::placeholder {
+  color: #999;
+}
+
+.bbs-hs svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 13px;
+  height: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  pointer-events: none;
+}
+
+.bbs-hero {
+  background: var(--b-accent);
+  color: #fff;
+  text-align: center;
+  padding: 24px 20px 34px;
+  box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.06);
+}
+
+.bbs-hero h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.bbs-hero p {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* 统计行独立样式：无副标题时也保持次级字号，不会突然变大 */
+.bbs-hero__stats {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Hero 图片 Banner 模式：图上加深色遮罩保证文字可读 */
+.bbs-hero--img {
+  position: relative;
+  background-size: cover;
+  background-position: center;
+  padding-top: 40px;
+  padding-bottom: 48px;
+}
+
+.bbs-hero--img::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 24, 32, 0.5);
+}
+
+.bbs-hero--img > * {
+  position: relative;
+}
+
+.bbs-hero--img p {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.bbs-hero--img .bbs-hero__stats {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* ---------------- 双栏骨架 ---------------- */
+
+.bbs-cols {
+  max-width: 1040px;
+  margin: 24px auto 0;
+  padding: 0 20px 64px;
+  display: grid;
+  grid-template-columns: 185px minmax(0, 1fr);
+  gap: 30px;
+  align-items: start;
+}
+
+.bbs-aside {
+  position: sticky;
+  top: 16px;
+}
+
+.bbs-start {
+  display: block;
+  text-align: center;
+  background: var(--b-accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 10px 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  transition: var(--b-tr);
+}
+
+.bbs-start:hover {
+  filter: brightness(0.94);
+}
+
+.bbs-nav {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bbs-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  margin: 0 -10px;
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--b-text-2);
+  font-weight: 500;
+  transition: var(--b-tr);
+}
+
+.bbs-nav__item:hover {
+  background: color-mix(in srgb, var(--b-accent) 8%, transparent);
+  color: var(--b-accent);
+}
+
+.bbs-nav__item.is-active {
+  color: var(--b-accent);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--b-accent) 12%, transparent);
+}
+
+.bbs-nav__dot {
+  width: 10px;
+  height: 10px;
+  /* 左右各补 3px，使色点与 16px 图标占位一致，分类文字左边线对齐 */
+  margin: 0 3px;
+  border-radius: 3px;
+  flex: none;
+  background: var(--b-accent);
+}
+
+.bbs-nav__icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  display: inline-flex;
+  color: inherit;
+}
+
+.bbs-nav__icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.bbs-nav__count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--b-text-3);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- 列表工具行 / 公告区 ---------------- */
+
+.bbs-sortrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--b-text-3);
+}
+
+.bbs-sortrow a {
+  color: var(--b-accent);
+  font-weight: 600;
+}
+
+/* ---------------- 帖子列表（Flarum 行 + Discourse 密度） ---------------- */
+
+.bbs-it {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 58px;
+  gap: 14px;
+  padding: 14px 16px;
+  margin: 0 -16px;
+  border-radius: 6px;
+  align-items: flex-start;
+  transition: var(--b-tr);
+}
+
+/* 克制的互动：仅标题与评论数可点（行内文字可自由选中），行 hover 只做背景反馈 */
+.bbs-it__link {
+  color: inherit;
+  min-width: 0;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.bbs-it:hover {
+  background: var(--b-panel);
+  box-shadow: 0 1px 3px rgba(27, 31, 35, 0.06);
+}
+
+.bbs-ava {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+
+.bbs-ava--letter {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  background: var(--b-accent);
+}
+
+.bbs-it__main {
+  min-width: 0;
+}
+
+.bbs-it__title {
+  display: block;
+  font-size: 15.5px;
+  font-weight: 650;
+  color: var(--b-text);
+  line-height: 1.4;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bbs-it__link:hover .bbs-it__title {
+  color: var(--b-accent);
+}
+
+.bbs-tags {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.bbs-tg {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fff;
+  border-radius: 3px;
+  padding: 2px 8px;
+  background: var(--b-accent);
+}
+
+.bbs-tg--ann {
+  background: var(--b-amber);
+}
+
+.bbs-tg--pin {
+  background: #8a97a6;
+}
+
+.bbs-it__excerpt {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--b-text-3);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.bbs-it__meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--b-text-3);
+}
+
+.bbs-it__meta b {
+  color: var(--b-text-2);
+  font-weight: 600;
+}
+
+.bbs-it__author {
+  color: var(--b-text-2);
+  font-weight: 600;
+  transition: var(--b-tr);
+}
+
+.bbs-it__author:hover {
+  color: var(--b-accent);
+}
+
+.bbs-rc {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--b-text-3);
+  /* 1px 补偿两侧行高差，使图标+数字与标题首行垂直居中对齐 */
+  padding-top: 1px;
+  font-variant-numeric: tabular-nums;
+  transition: var(--b-tr);
+}
+
+.bbs-rc:hover {
+  color: var(--b-accent);
+}
+
+.bbs-rc svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+/* ---------------- 空态 / 分页 / 页脚 ---------------- */
+
+.bbs-empty {
+  padding: 64px 0;
+  text-align: center;
+  color: var(--b-text-3);
+}
+
+.bbs-empty svg {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 8px;
+  opacity: 0.6;
+}
+
+.bbs-empty p {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.bbs-pg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.bbs-pg__btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 18px;
+  background: color-mix(in srgb, var(--b-text-2) 12%, transparent);
+  color: var(--b-text-2);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: var(--b-tr);
+}
+
+.bbs-pg__btn:hover {
+  background: var(--b-accent);
+  color: #fff;
+}
+
+.bbs-pg__btn.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.bbs-pg__info {
+  font-size: 12.5px;
+  color: var(--b-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.bbs-foot {
+  text-align: center;
+  padding: 26px 0 0;
+}
+
+.bbs-foot a {
+  font-size: 12.5px;
+  color: var(--b-text-3);
+  transition: var(--b-tr);
+}
+
+.bbs-foot a:hover {
+  color: var(--b-accent);
+}
+
+/* ---------------- 详情页 ---------------- */
+
+.bbs-cols--narrow {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 860px;
+}
+
+.bbs-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--b-text-3);
+  margin-bottom: 14px;
+}
+
+.bbs-crumbs a {
+  color: var(--b-text-2);
+  font-weight: 600;
+  transition: var(--b-tr);
+}
+
+.bbs-crumbs a:hover {
+  color: var(--b-accent);
+}
+
+.bbs-article {
+  background: var(--b-panel);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(27, 31, 35, 0.07);
+  padding: 28px 32px 32px;
+}
+
+.bbs-article__title {
+  margin: 0 0 14px;
+  font-size: 24px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.32;
+}
+
+.bbs-article__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--b-line);
+}
+
+.bbs-article__head .bbs-ava {
+  width: 42px;
+  height: 42px;
+}
+
+.bbs-article__who {
+  min-width: 0;
+}
+
+.bbs-article__name {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  transition: var(--b-tr);
+}
+
+a.bbs-article__name:hover {
+  color: var(--b-accent);
+}
+
+.bbs-article__meta {
+  font-size: 12px;
+  color: var(--b-text-3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bbs-article__edited {
+  cursor: help;
+  text-decoration: underline dotted;
+}
+
+.bbs-article__cmt {
+  color: var(--b-text-3);
+  transition: var(--b-tr);
+}
+
+.bbs-article__cmt:hover {
+  color: var(--b-accent);
+}
+
+.bbs-article__tags {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* 条件目录（正文标题 ≥ 3 个时由脚本填充显示） */
+
+.bbs-toc {
+  margin: 0 0 20px;
+  border: 1px solid var(--b-line);
+  border-radius: 8px;
+  background: var(--b-bg);
+  padding: 10px 14px;
+}
+
+.bbs-toc summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--b-text-2);
+  user-select: none;
+}
+
+.bbs-toc__list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.bbs-toc__item {
+  font-size: 13px;
+  color: var(--b-text-2);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: var(--b-tr);
+}
+
+.bbs-toc__item:hover {
+  color: var(--b-accent);
+}
+
+.bbs-toc__item--sub {
+  padding-left: 14px;
+  font-size: 12.5px;
+  color: var(--b-text-3);
+}
+
+/* 作者页 */
+
+.bbs-author {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--b-panel);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(27, 31, 35, 0.07);
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+
+.bbs-author__ava {
+  width: 56px;
+  height: 56px;
+}
+
+.bbs-author__ava.bbs-ava--letter {
+  font-size: 22px;
+}
+
+.bbs-author__name {
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.bbs-author__meta {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--b-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 图片灯箱 */
+
+.bbs-zoomable {
+  cursor: zoom-in;
+}
+
+.bbs-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 12, 16, 0.88);
+  cursor: zoom-out;
+}
+
+.bbs-lightbox.on {
+  display: flex;
+}
+
+.bbs-lightbox img {
+  max-width: 94vw;
+  max-height: 92vh;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+
+/* 移动端发帖悬浮按钮（仅小屏显示） */
+
+.bbs-fab {
+  position: fixed;
+  right: 18px;
+  /* 避开 iOS 底部手势条 */
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--b-accent);
+  color: #fff;
+  display: none;
+  place-items: center;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--b-accent) 45%, transparent);
+}
+
+.bbs-fab svg {
+  width: 21px;
+  height: 21px;
+}
+
+/* 正文排版 */
+
+.prose {
+  font-size: 15px;
+  color: var(--b-text);
+  word-break: break-word;
+  line-height: 1.75;
+}
+
+.prose p {
+  margin: 0 0 1em;
+}
+
+/* 首元素去顶距、末元素去底距：正文以标题开头/段落结尾时不产生多余空隙 */
+.prose > :first-child {
+  margin-top: 0;
+}
+
+.prose > :last-child {
+  margin-bottom: 0;
+}
+
+.prose img,
+.prose video {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.prose a {
+  color: var(--b-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  margin: 1.5em 0 0.6em;
+  line-height: 1.35;
+  scroll-margin-top: 16px;
+}
+
+.prose blockquote {
+  margin: 1em 0;
+  padding: 4px 16px;
+  border-left: 3px solid var(--b-accent);
+  color: var(--b-text-2);
+  background: color-mix(in srgb, var(--b-accent) 5%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+
+.prose pre {
+  padding: 14px 16px;
+  border-radius: 6px;
+  background: #14161b;
+  color: #e2e8f0;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.prose code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875em;
+}
+
+.prose :not(pre) > code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--b-accent) 10%, transparent);
+  color: var(--b-accent);
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 13.5px;
+}
+
+.prose th,
+.prose td {
+  padding: 8px 12px;
+  border: 1px solid var(--b-line);
+  text-align: left;
+}
+
+.prose th {
+  background: var(--b-bg);
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--b-line);
+  margin: 1.8em 0;
+}
+
+/* 评论区 */
+
+.post-comments {
+  margin-top: 16px;
+  background: var(--b-panel);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(27, 31, 35, 0.07);
+  padding: 20px 32px;
+  scroll-margin-top: 16px;
+}
+
+.post-comments__head {
+  font-size: 15px;
+  font-weight: 700;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--b-line);
+}
+
+.post-comments__head b {
+  color: var(--b-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 相关推荐 */
+
+.bbs-related {
+  margin-top: 16px;
+  background: var(--b-panel);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(27, 31, 35, 0.07);
+  overflow: hidden;
+}
+
+/* 水平内边距与文章卡（32px）一致，三张卡片文字左边线对齐 */
+.bbs-related__head {
+  padding: 12px 32px;
+  font-size: 14px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--b-line);
+}
+
+.bbs-related__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 32px;
+  font-size: 13.5px;
+  color: var(--b-text-2);
+  transition: var(--b-tr);
+}
+
+.bbs-related__row + .bbs-related__row {
+  border-top: 1px solid var(--b-line);
+}
+
+.bbs-related__row:hover {
+  background: color-mix(in srgb, var(--b-accent) 4%, transparent);
+  color: var(--b-accent);
+}
+
+.bbs-related__title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bbs-related__time {
+  flex: none;
+  font-size: 12px;
+  color: var(--b-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- 响应式 ---------------- */
+
+/* 移动端统一 16px 页边距：顶栏 / Hero / 内容区左右边线对齐 */
+@media (max-width: 800px) {
+  .bbs-hd__in {
+    gap: 10px;
+    padding: 0 16px;
+  }
+
+  .bbs-lg {
+    font-size: 15px;
+  }
+
+  .bbs-hs {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .bbs-fab {
+    display: grid;
+  }
+
+  .bbs-article__head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .bbs-author {
+    padding: 16px;
+  }
+
+  .bbs-cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin-top: 16px;
+    padding: 0 16px 64px;
+  }
+
+  .bbs-aside {
+    position: static;
+    margin-bottom: 16px;
+  }
+
+  .bbs-start {
+    display: none;
+  }
+
+  /* 移动端：分类导航变横滑胶囊 */
+  .bbs-nav {
+    margin-top: 0;
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .bbs-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bbs-nav__item {
+    flex: none;
+    margin: 0;
+    border: 1px solid var(--b-line);
+    background: var(--b-panel);
+    border-radius: 999px;
+    padding: 6px 13px;
+    font-size: 13px;
+  }
+
+  .bbs-nav__item.is-active {
+    background: var(--b-accent);
+    color: #fff;
+  }
+
+  .bbs-nav__count {
+    display: none;
+  }
+
+  .bbs-nav__dot,
+  .bbs-nav__icon {
+    display: none;
+  }
+
+  .bbs-it {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 10px;
+    margin: 0 -8px;
+    padding: 12px 8px;
+  }
+
+  .bbs-ava {
+    width: 38px;
+    height: 38px;
+  }
+
+  .bbs-ava--letter {
+    font-size: 15px;
+  }
+
+  .bbs-it__title {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .bbs-hero {
+    padding: 18px 16px 26px;
+  }
+
+  .bbs-hero h1 {
+    font-size: 19px;
+  }
+
+  .bbs-article {
+    padding: 20px 16px 24px;
+  }
+
+  .bbs-article__title {
+    font-size: 19px;
+  }
+
+  .post-comments {
+    padding: 16px;
+  }
+
+  .bbs-related__head,
+  .bbs-related__row {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

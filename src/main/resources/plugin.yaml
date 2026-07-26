@@ -1,0 +1,22 @@
+# Refer https://docs.halo.run/developer-guide/plugin/basics/manifest
+apiVersion: plugin.halo.run/v1alpha1
+kind: Plugin
+metadata:
+  name: bbs
+spec:
+  enabled: true
+  requires: ">=2.25.0"
+  settingName: bbs-settings
+  configMapName: bbs-configmap
+  author:
+    name: Tim0x0
+    website: https://github.com/Tim0x0
+  logo: logo.svg
+  homepage: https://github.com/Tim0x0/halo-plugin-bbs#readme
+  repo: https://github.com/Tim0x0/halo-plugin-bbs
+  issues: https://github.com/Tim0x0/halo-plugin-bbs/issues
+  displayName: "BBS 社区"
+  description: "置顶公告与社区帖子：支持分类（如 CS1.6 / DNF / 插件专区）、Console 管理、用户中心发帖、现代化前台访问页，并向主题开放 Finder 与公开 API。"
+  license:
+    - name: "GPL-3.0"
+      url: "https://github.com/Tim0x0/halo-plugin-bbs/blob/main/LICENSE"

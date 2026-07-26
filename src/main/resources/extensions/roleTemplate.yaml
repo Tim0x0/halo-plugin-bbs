@@ -1,0 +1,80 @@
+# BBS 社区查看：Console 只读（帖子/分类列表与详情），对齐官方"查看/管理"两级模板
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: bbs-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "BBS 社区"
+    rbac.authorization.halo.run/display-name: "BBS 社区查看"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:bbs:view"]
+rules:
+  - apiGroups: ["bbs.timxs.com"]
+    resources: ["bbsposts", "bbscategories"]
+    verbs: ["get", "list"]
+  - apiGroups: ["console.api.bbs.timxs.com"]
+    resources: ["*"]
+    verbs: ["get", "list"]
+---
+# BBS 社区管理：帖子/公告/分类的全部管理能力（依赖查看角色）
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: bbs-manage
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/dependencies: |
+      ["bbs-view"]
+    rbac.authorization.halo.run/module: "BBS 社区"
+    rbac.authorization.halo.run/display-name: "BBS 社区管理"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:bbs:view", "plugin:bbs:manage"]
+rules:
+  - apiGroups: ["bbs.timxs.com"]
+    resources: ["bbsposts", "bbscategories"]
+    verbs: ["*"]
+  - apiGroups: ["console.api.bbs.timxs.com"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+# 用户发帖：用户中心管理自己的帖子（聚合到所有登录用户，注册即有）
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: bbs-uc-post
+  labels:
+    halo.run/role-template: "true"
+    rbac.authorization.halo.run/aggregate-to-authenticated: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "BBS 社区"
+    rbac.authorization.halo.run/display-name: "BBS 社区发帖"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:bbs:uc"]
+rules:
+  - apiGroups: ["uc.api.bbs.timxs.com"]
+    resources: ["bbsposts"]
+    verbs: ["create", "get", "list", "update", "delete"]
+---
+# 公开读：前台浏览已发布帖子/公告/分类（聚合到匿名 + 登录用户）
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: bbs-public-read
+  labels:
+    halo.run/role-template: "true"
+    halo.run/hidden: "true"
+    rbac.authorization.halo.run/aggregate-to-anonymous: "true"
+    rbac.authorization.halo.run/aggregate-to-authenticated: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "BBS 社区"
+rules:
+  - apiGroups: ["api.bbs.timxs.com"]
+    resources: ["posts", "announcements", "categories"]
+    verbs: ["get", "list"]
+  # 帖子评论（Halo 评论体系子资源）：实际能否匿名评论仍由「系统设置 → 评论」控制
+  - apiGroups: ["bbs.timxs.com"]
+    resources: ["bbsposts/comments"]
+    verbs: ["create", "list"]

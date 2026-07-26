@@ -1,0 +1,83 @@
+apiVersion: v1alpha1
+kind: Setting
+metadata:
+  name: bbs-settings
+spec:
+  forms:
+    - group: base
+      label: 基础
+      formSchema:
+        - $formkit: number
+          name: pageSize
+          label: 帖子列表每页条数
+          value: 10
+          min: 1
+          max: 50
+        - $formkit: number
+          name: announcementCount
+          label: 首页公告展示条数
+          value: 3
+          min: 1
+          max: 10
+    - group: appearance
+      label: 外观
+      formSchema:
+        - $formkit: text
+          name: pageTitle
+          label: 前台页面标题
+          value: "BBS 社区"
+        - $formkit: attachmentInput
+          name: logo
+          label: 社区 Logo
+          help: 展示在前台顶栏；留空显示默认图标
+          accepts:
+            - "image/*"
+          value: ""
+        - $formkit: text
+          name: slogan
+          label: 社区副标题
+          help: 展示在 Hero 标题下方，可与统计信息同时展示
+          value: ""
+        - $formkit: color
+          name: accentColor
+          label: 前台主题色
+          help: 前台顶栏 / Hero / 按钮的品牌色
+          value: "#4d698e"
+        - $formkit: select
+          name: heroStyle
+          id: hero_style
+          label: Hero 背景
+          value: "color"
+          options:
+            - label: 纯色（使用前台主题色）
+              value: "color"
+            - label: 图片 Banner
+              value: "image"
+        - $formkit: attachmentInput
+          if: "$get(hero_style).value === 'image'"
+          name: bannerImage
+          label: Banner 图片
+          help: 建议宽度 ≥ 1600px，自动叠加深色遮罩保证文字可读
+          accepts:
+            - "image/*"
+          value: ""
+        - $formkit: switch
+          name: showStats
+          label: 显示统计信息
+          help: 在 Hero 区显示「共 N 篇帖子 · M 个分类」，与副标题可同时展示
+          value: true
+    - group: moderation
+      label: 审核
+      formSchema:
+        - $formkit: switch
+          name: requireReview
+          id: require_review
+          label: 用户发帖需审核
+          help: 开启后，用户在用户中心发布的帖子须管理员审核通过后才会展示；关闭则发布即生效。管理员在后台发布不受影响
+          value: false
+        - $formkit: switch
+          if: "$get(require_review).value === true"
+          name: reviewOnEdit
+          label: 编辑已发布内容需重新审核
+          help: 开启（默认）：已过审帖子被编辑后退回待审核，防止“过审后改内容”绕过；关闭：已过审帖子的编辑直接生效（请结合社区信任度决定）。新发布与被驳回后的重新提交始终需要审核
+          value: true

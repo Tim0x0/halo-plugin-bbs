@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>BBS 前台最终设计预览（与插件同一份 CSS）</title>
+<link rel="stylesheet" href="../src/main/resources/static/bbs.css"/>
+<style>
+  .pv-divider {
+    max-width: 1040px; margin: 0 auto; padding: 26px 20px 10px;
+    font: 700 13px/1 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--b-text-3); letter-spacing: .1em;
+  }
+</style>
+</head>
+<body class="bbs-body" style="--b-accent:#4d698e">
+
+<div class="pv-divider">▍列表页（/bbs）</div>
+
+<header class="bbs-hd">
+  <div class="bbs-hd__in">
+    <a class="bbs-lg" href="#">
+      <span class="bbs-lg__mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 5 7 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3l9 4V5z" fill="currentColor" fill-opacity="0.3"/>
+          <path d="M19 9a4 4 0 0 1 0 6"/>
+        </svg>
+      </span>
+      <span>老玩家俱乐部</span>
+    </a>
+    <form class="bbs-hs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" placeholder="搜索帖子…"/>
+    </form>
+  </div>
+</header>
+
+<section class="bbs-hero">
+  <h1>老玩家俱乐部</h1>
+  <p>共 <b>128</b> 篇帖子 · <b>3</b> 个分类</p>
+</section>
+
+<div class="bbs-cols">
+  <aside class="bbs-aside">
+    <a class="bbs-start" href="#">发布帖子</a>
+    <nav class="bbs-nav">
+      <a class="bbs-nav__item is-active" href="#">
+        <span class="bbs-nav__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </span>
+        <span>全部帖子</span>
+      </a>
+      <a class="bbs-nav__item" href="#">
+        <span class="bbs-nav__icon" style="color:#f97316">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v1.06A8 8 0 0 1 19.94 11H21a1 1 0 1 1 0 2h-1.06A8 8 0 0 1 13 19.94V21a1 1 0 1 1-2 0v-1.06A8 8 0 0 1 4.06 13H3a1 1 0 1 1 0-2h1.06A8 8 0 0 1 11 4.06V3a1 1 0 0 1 1-1zm0 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 4a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg>
+        </span>
+        <span>CS1.6</span>
+        <span class="bbs-nav__count">54</span>
+      </a>
+      <a class="bbs-nav__item" href="#">
+        <span class="bbs-nav__icon" style="color:#ef4444">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M6.92 5H5l9 9 1-.94L6.92 5zM4 6.27 2.28 8l7.32 7.32-1.06 1.06-1.42-1.41-1.41 1.41 2.12 2.12L6 20.33 7.74 22l1.83-1.83 2.12 2.12 1.41-1.41-1.41-1.42 1.06-1.06 7.32 7.32L22 18.27 4 6.27zM20 2l-3.72 3.72 1.94 1.94L22 3.94V2h-2z"/></svg>
+        </span>
+        <span>DNF</span>
+        <span class="bbs-nav__count">47</span>
+      </a>
+      <a class="bbs-nav__item" href="#">
+        <span class="bbs-nav__icon" style="color:#6366f1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M13 3a2 2 0 0 1 2 2v1h3a1 1 0 0 1 1 1v3h-1a2 2 0 1 0 0 4h1v3a1 1 0 0 1-1 1h-3v-1a2 2 0 1 0-4 0v1H8a1 1 0 0 1-1-1v-3H6a2 2 0 1 1 0-4h1V7a1 1 0 0 1 1-1h3V5a2 2 0 0 1 2-2z"/></svg>
+        </span>
+        <span>插件专区</span>
+        <span class="bbs-nav__count">27</span>
+      </a>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="bbs-sortrow"><span>共 128 篇帖子</span></div>
+
+    <div class="bbs-list">
+      <div class="bbs-it">
+        <span class="bbs-ava bbs-ava--letter" style="background:#8b5cf6">管</span>
+        <div class="bbs-it__main">
+          <a class="bbs-it__link" href="#"><span class="bbs-it__title">全服数据互通完成，本周六晚 8 点开新区「怀旧一区」</span></a>
+          <div class="bbs-tags"><span class="bbs-tg bbs-tg--ann">公告</span><span class="bbs-tg bbs-tg--pin">置顶</span></div>
+          <p class="bbs-it__excerpt">数据互通已完成最后一轮压测，老区角色可整体迁移；新区开放首周双倍经验，细则与迁移流程见正文。</p>
+          <div class="bbs-it__meta"><b>管理员</b><span> 发布于 2026-07-24</span></div>
+        </div>
+        <a class="bbs-rc" href="#comments-demo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>42</span></a>
+      </div>
+      <div class="bbs-it">
+        <span class="bbs-ava bbs-ava--letter" style="background:#8b5cf6">管</span>
+        <div class="bbs-it__main">
+          <a class="bbs-it__link" href="#"><span class="bbs-it__title">新人必读：社区规则与发帖指南（2026 修订版）</span></a>
+          <div class="bbs-tags"><span class="bbs-tg bbs-tg--ann">公告</span></div>
+          <div class="bbs-it__meta"><b>管理员</b><span> 发布于 2026-07-18</span></div>
+        </div>
+        <a class="bbs-rc" href="#comments-demo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>7</span></a>
+      </div>
+
+      <div class="bbs-it">
+        <span class="bbs-ava bbs-ava--letter" style="background:#f97316">老</span>
+        <div class="bbs-it__main">
+          <a class="bbs-it__link" href="#"><span class="bbs-it__title">CS1.6 周末混战服重新开放，老图轮换 + 反作弊已更新</span></a>
+          <div class="bbs-tags"><span class="bbs-tg" style="background:#f97316">CS1.6</span><span class="bbs-tg bbs-tg--pin">置顶</span></div>
+          <p class="bbs-it__excerpt">de_dust2、de_inferno、cs_assault 经典三连，晚上八点后人最多，服务器 128 tick，来炸鱼的抓紧。</p>
+          <div class="bbs-it__meta"><b>老王</b><span> 发布于 2026-07-25</span></div>
+        </div>
+        <a class="bbs-rc" href="#comments-demo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>23</span></a>
+      </div>
+      <div class="bbs-it">
+        <span class="bbs-ava bbs-ava--letter" style="background:#ef4444">弹</span>
+        <div class="bbs-it__main">
+          <a class="bbs-it__link" href="#"><span class="bbs-it__title">DNF 110 级版本搬砖收益实测：三个图对比（附表格）</span></a>
+          <div class="bbs-tags"><span class="bbs-tg" style="background:#ef4444">DNF</span></div>
+          <p class="bbs-it__excerpt">测试角色 105 弹药，疲劳全跑一遍，金价按今天 1:38 折算，纯收益排序和时间成本排序完全相反。</p>
+          <div class="bbs-it__meta"><b>弹药专家本人</b><span> 发布于 2026-07-25</span><span> · 已编辑</span></div>
+        </div>
+        <a class="bbs-rc" href="#comments-demo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>65</span></a>
+      </div>
+      <div class="bbs-it">
+        <span class="bbs-ava bbs-ava--letter" style="background:#0ea5e9">T</span>
+        <div class="bbs-it__main">
+          <a class="bbs-it__link" href="#"><span class="bbs-it__title">【插件发布】战绩查询插件 v2.1：支持赛季数据与好友对比</span></a>
+          <div class="bbs-tags"><span class="bbs-tg" style="background:#6366f1">插件专区</span></div>
+          <p class="bbs-it__excerpt">新增赛季 K/D 曲线、修复查询超时、支持在个人页展示徽章，升级前请备份配置。</p>
+          <div class="bbs-it__meta"><b>Tim</b><span> 发布于 2026-07-24</span></div>
+        </div>
+        <a class="bbs-rc" href="#comments-demo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>18</span></a>
+      </div>
+      <div class="bbs-it">
+        <span class="bbs-ava bbs-ava--letter" style="background:#10b981">阿</span>
+        <div class="bbs-it__main">
+          <a class="bbs-it__link" href="#"><span class="bbs-it__title">求一个稳定的登录器，官方的老是掉线</span></a>
+          <div class="bbs-tags"><span class="bbs-tg" style="background:#f97316">CS1.6</span></div>
+          <div class="bbs-it__meta"><b>阿伟</b><span> 发布于 2026-07-23</span></div>
+        </div>
+        <a class="bbs-rc" href="#comments-demo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>9</span></a>
+      </div>
+      <div class="bbs-it">
+        <span class="bbs-ava bbs-ava--letter" style="background:#f59e0b">奶</span>
+        <div class="bbs-it__main">
+          <a class="bbs-it__link" href="#"><span class="bbs-it__title">跨区组队打团，长期缺一个奶妈，工资团</span></a>
+          <div class="bbs-tags"><span class="bbs-tg" style="background:#ef4444">DNF</span></div>
+          <p class="bbs-it__excerpt">周二周四晚上九点准时开团，语音必须有，装备不苛刻但手法要过关。</p>
+          <div class="bbs-it__meta"><b>固定团团长</b><span> 发布于 2026-07-22</span></div>
+        </div>
+        <a class="bbs-rc" href="#comments-demo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>3</span></a>
+      </div>
+      <div class="bbs-it">
+        <span class="bbs-ava bbs-ava--letter" style="background:#8b5cf6">管</span>
+        <div class="bbs-it__main">
+          <a class="bbs-it__link" href="#"><span class="bbs-it__title">服务器将于周三凌晨 2:00 - 4:00 例行维护</span></a>
+          <div class="bbs-tags"><span class="bbs-tg" style="background:#6366f1">插件专区</span></div>
+          <div class="bbs-it__meta"><b>管理员</b><span> 发布于 2026-07-21</span></div>
+        </div>
+        <a class="bbs-rc" href="#comments-demo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>0</span></a>
+      </div>
+    </div>
+
+    <nav class="bbs-pg">
+      <span class="bbs-pg__btn is-disabled">‹ 上一页</span>
+      <span class="bbs-pg__info">1 / 13</span>
+      <a class="bbs-pg__btn" href="#">下一页 ›</a>
+    </nav>
+
+    <footer class="bbs-foot"><a href="#">← 返回站点首页</a></footer>
+  </main>
+</div>
+
+<div class="pv-divider">▍详情页（/bbs/post/{slug}）</div>
+
+<header class="bbs-hd">
+  <div class="bbs-hd__in">
+    <a class="bbs-lg" href="#">
+      <span class="bbs-lg__mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 5 7 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3l9 4V5z" fill="currentColor" fill-opacity="0.3"/>
+          <path d="M19 9a4 4 0 0 1 0 6"/>
+        </svg>
+      </span>
+      <span>老玩家俱乐部</span>
+    </a>
+    <form class="bbs-hs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" placeholder="搜索帖子…"/>
+    </form>
+  </div>
+</header>
+
+<div class="bbs-cols bbs-cols--narrow">
+  <main>
+    <nav class="bbs-crumbs">
+      <a href="#">老玩家俱乐部</a>
+      <span>/</span>
+      <a href="#">DNF</a>
+    </nav>
+
+    <article class="bbs-article">
+      <h1 class="bbs-article__title">DNF 110 级版本搬砖收益实测：三个图对比（附表格）</h1>
+      <div class="bbs-article__head">
+        <span class="bbs-ava bbs-ava--letter" style="background:#ef4444">弹</span>
+        <div class="bbs-article__who">
+          <div class="bbs-article__name">弹药专家本人</div>
+          <div class="bbs-article__meta">
+            <span>2026-07-25 21:14</span>
+            <span class="bbs-article__edited" title="2026-07-26 09:02">已编辑</span>
+            <a class="bbs-article__cmt" href="#comments-demo">65 条评论</a>
+          </div>
+        </div>
+        <div class="bbs-article__tags">
+          <span class="bbs-tg bbs-tg--pin">置顶</span>
+          <span class="bbs-tg" style="background:#ef4444">DNF</span>
+        </div>
+      </div>
+      <div class="prose">
+        <p>测试条件先说清楚，免得评论区抬杠：角色是 105 级弹药，装备打造中等偏上，疲劳药一瓶，金价按今天 <code>1:38</code> 折算。</p>
+        <h3>结论先行</h3>
+        <blockquote><p>纯收益排序：矛盾结晶室 &gt; 白云溪谷 &gt; 军团地下城，但算上时间成本后顺序完全反过来。</p></blockquote>
+        <table>
+          <thead><tr><th>地图</th><th>单把耗时</th><th>毛收入（万金）</th><th>折算 RMB/小时</th></tr></thead>
+          <tbody>
+            <tr><td>矛盾结晶室</td><td>2 分 10 秒</td><td>386</td><td>约 14.2</td></tr>
+            <tr><td>白云溪谷</td><td>1 分 40 秒</td><td>295</td><td>约 13.8</td></tr>
+            <tr><td>军团地下城</td><td>6 分 30 秒</td><td>810</td><td>约 11.5</td></tr>
+          </tbody>
+        </table>
+        <p>另外提醒一句：<strong>周四维护后金价一般会跌</strong>，想出金的别囤到周末。有问题评论区见。</p>
+      </div>
+    </article>
+
+    <section class="post-comments" id="comments-demo">
+      <div class="post-comments__head"><b>65</b> 条评论 <span style="color:var(--b-text-3);font-weight:400;font-size:12px">（评论内容由 Halo 评论组件渲染）</span></div>
+    </section>
+
+    <section class="bbs-related">
+      <div class="bbs-related__head">更多「DNF」的帖子</div>
+      <a class="bbs-related__row" href="#"><span class="bbs-related__title">跨区组队打团，长期缺一个奶妈，工资团</span><span class="bbs-related__time">07-22</span></a>
+      <a class="bbs-related__row" href="#"><span class="bbs-related__title">110 版本回坑毕业路线求指点，附现有装备截图</span><span class="bbs-related__time">07-21</span></a>
+      <a class="bbs-related__row" href="#"><span class="bbs-related__title">周年庆礼包值不值得买？给个建议</span><span class="bbs-related__time">07-19</span></a>
+    </section>
+
+    <footer class="bbs-foot"><a href="#">← 返回 老玩家俱乐部</a></footer>
+  </main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org" xmlns:halo="https://halo.run">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title th:text="|${post.title} - ${bbsTitle}|">帖子</title>
+  <meta name="description" th:if="${!#strings.isEmpty(post.excerpt)}" th:content="${post.excerpt}"/>
+  <meta property="og:type" content="article"/>
+  <meta property="og:title" th:content="${post.title}"/>
+  <meta property="og:description" th:if="${!#strings.isEmpty(post.excerpt)}"
+        th:content="${post.excerpt}"/>
+  <link rel="stylesheet" th:href="@{/plugins/bbs/assets/static/bbs.css}"/>
+</head>
+<body class="bbs-body" th:style="'--b-accent:' + ${accentColor}">
+
+<!-- 品牌色顶栏 -->
+<header class="bbs-hd">
+  <div class="bbs-hd__in">
+    <a class="bbs-lg" th:href="@{/bbs}">
+      <img class="bbs-lg__img" th:if="${logoUrl != null}" th:src="${logoUrl}" alt=""/>
+      <span class="bbs-lg__mark" th:if="${logoUrl == null}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 5 7 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3l9 4V5z" fill="currentColor" fill-opacity="0.3"/>
+          <path d="M19 9a4 4 0 0 1 0 6"/>
+        </svg>
+      </span>
+      <span th:text="${bbsTitle}">BBS 社区</span>
+    </a>
+    <form class="bbs-hs" method="get" th:action="@{/bbs}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" name="q" placeholder="搜索帖子…"/>
+    </form>
+  </div>
+</header>
+
+<div class="bbs-cols bbs-cols--narrow">
+  <main>
+    <!-- 面包屑 -->
+    <nav class="bbs-crumbs">
+      <a th:href="@{/bbs}" th:text="${bbsTitle}">BBS 社区</a>
+      <span>/</span>
+      <a th:if="${post.category != null}"
+         th:href="@{/bbs(category=${post.category.slug})}"
+         th:text="${post.category.displayName}">分类</a>
+      <span th:if="${post.category == null && post.type == 'ANNOUNCEMENT'}">全站公告</span>
+      <span th:if="${post.category == null && post.type != 'ANNOUNCEMENT'}">帖子</span>
+    </nav>
+
+    <article class="bbs-article">
+      <h1 class="bbs-article__title" th:text="${post.title}">标题</h1>
+
+      <div class="bbs-article__head" th:if="${post.owner != null}">
+        <img class="bbs-ava" th:if="${!#strings.isEmpty(post.owner.avatar)}"
+             th:src="${post.owner.avatar}" th:alt="${post.owner.displayName}"/>
+        <span class="bbs-ava bbs-ava--letter" th:if="${#strings.isEmpty(post.owner.avatar)}"
+              th:text="${#strings.substring(post.owner.displayName, 0, 1)}">A</span>
+        <div class="bbs-article__who">
+          <a class="bbs-article__name" th:href="@{'/bbs/u/' + ${post.owner.name}}"
+             th:text="${post.owner.displayName}">作者</a>
+          <div class="bbs-article__meta">
+            <span th:if="${post.publishTime != null}"
+                  th:text="${#temporals.format(post.publishTime, 'yyyy-MM-dd HH:mm')}">时间</span>
+            <span class="bbs-article__edited" th:if="${post.lastEditTime != null}"
+                  th:title="${#temporals.format(post.lastEditTime, 'yyyy-MM-dd HH:mm')}">已编辑</span>
+            <a class="bbs-article__cmt" href="#comments"
+               th:text="|${post.commentCount != null ? post.commentCount : 0} 条评论|">0 条评论</a>
+          </div>
+        </div>
+        <div class="bbs-article__tags">
+          <span class="bbs-tg bbs-tg--ann" th:if="${post.type == 'ANNOUNCEMENT'}">公告</span>
+          <span class="bbs-tg bbs-tg--pin" th:if="${post.pinned}">置顶</span>
+          <span class="bbs-tg" th:if="${post.category != null}"
+                th:style="${post.category.color != null ? 'background:' + post.category.color : ''}"
+                th:text="${post.category.displayName}">分类</span>
+        </div>
+      </div>
+
+      <!-- 目录：仅当正文标题（h2/h3）≥ 3 个时由脚本填充并显示 -->
+      <details class="bbs-toc" id="bbsToc" hidden open>
+        <summary>目录</summary>
+        <nav class="bbs-toc__list"></nav>
+      </details>
+
+      <!-- 正文：写入时已经服务端白名单净化，此处安全输出 -->
+      <div class="prose" th:utext="${post.content}">正文</div>
+    </article>
+
+    <!-- 评论区：列表页评论数直达此锚点；渲染由 Halo 评论组件插件负责 -->
+    <section class="post-comments" id="comments">
+      <div class="post-comments__head">
+        <b th:text="${post.commentCount != null ? post.commentCount : 0}">0</b> 条评论
+      </div>
+      <halo:comment group="bbs.timxs.com" kind="BbsPost" th:attr="name=${post.name}" />
+    </section>
+
+    <!-- 相关推荐：同分类最新帖子（公告为全站最新），读完有去处 -->
+    <section class="bbs-related" th:if="${!#lists.isEmpty(relatedPosts)}">
+      <div class="bbs-related__head"
+           th:text="${post.category != null ? '更多「' + post.category.displayName + '」的帖子' : '更多帖子'}">更多帖子</div>
+      <a class="bbs-related__row" th:each="r : ${relatedPosts}" th:href="@{${r.permalink}}">
+        <span class="bbs-related__title" th:text="${r.title}">标题</span>
+        <span class="bbs-related__time" th:if="${r.publishTime != null}"
+              th:text="${#temporals.format(r.publishTime, 'MM-dd')}">01-01</span>
+      </a>
+    </section>
+
+    <footer class="bbs-foot">
+      <a th:href="@{/bbs}">← 返回 <span th:text="${bbsTitle}">BBS 社区</span></a>
+    </footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  // 条件目录：正文 h2/h3 ≥ 3 个才生成（短帖无感）
+  var prose = document.querySelector('.prose');
+  var toc = document.getElementById('bbsToc');
+  if (prose && toc) {
+    var heads = prose.querySelectorAll('h2, h3');
+    if (heads.length >= 3) {
+      var list = toc.querySelector('.bbs-toc__list');
+      heads.forEach(function (h, i) {
+        if (!h.id) h.id = 'sec-' + (i + 1);
+        var a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        a.className = 'bbs-toc__item' + (h.tagName === 'H3' ? ' bbs-toc__item--sub' : '');
+        list.appendChild(a);
+      });
+      toc.hidden = false;
+    }
+  }
+
+  // 图片灯箱：点击正文图片放大，点击遮罩或 Esc 关闭
+  var imgs = document.querySelectorAll('.prose img');
+  if (imgs.length) {
+    var overlay = document.createElement('div');
+    overlay.className = 'bbs-lightbox';
+    overlay.innerHTML = '<img alt=""/>';
+    document.body.appendChild(overlay);
+    var big = overlay.querySelector('img');
+    imgs.forEach(function (img) {
+      img.classList.add('bbs-zoomable');
+      img.addEventListener('click', function () {
+        big.src = img.currentSrc || img.src;
+        overlay.classList.add('on');
+      });
+    });
+    overlay.addEventListener('click', function () { overlay.classList.remove('on'); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') overlay.classList.remove('on');
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

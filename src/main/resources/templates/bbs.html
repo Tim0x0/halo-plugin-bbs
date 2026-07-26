@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title th:text="${title}">BBS 社区</title>
+  <meta name="description" th:if="${slogan != ''}" th:content="${slogan}"/>
+  <link rel="alternate" type="application/rss+xml" th:title="${title}" th:href="@{/bbs/rss.xml}"/>
+  <link rel="stylesheet" th:href="@{/plugins/bbs/assets/static/bbs.css}"/>
+</head>
+<body class="bbs-body" th:style="'--b-accent:' + ${accentColor}">
+
+<!-- 品牌色顶栏 -->
+<header class="bbs-hd">
+  <div class="bbs-hd__in">
+    <a class="bbs-lg" th:href="@{/bbs}">
+      <img class="bbs-lg__img" th:if="${logoUrl != null}" th:src="${logoUrl}" alt=""/>
+      <span class="bbs-lg__mark" th:if="${logoUrl == null}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 5 7 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3l9 4V5z" fill="currentColor" fill-opacity="0.3"/>
+          <path d="M19 9a4 4 0 0 1 0 6"/>
+        </svg>
+      </span>
+      <span th:text="${title}">BBS 社区</span>
+    </a>
+    <form class="bbs-hs" method="get" th:action="@{/bbs}">
+      <input type="hidden" name="category" th:value="${currentCategory}"/>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" name="q" th:value="${keyword}" placeholder="搜索帖子…"/>
+    </form>
+  </div>
+</header>
+
+<!-- Hero：纯色（主题色）或图片 Banner（外观设置） -->
+<section class="bbs-hero" th:classappend="${bannerUrl != null} ? 'bbs-hero--img' : ''"
+         th:style="${bannerUrl != null} ? |background-image:url('${bannerUrl}')| : ''">
+  <h1 th:text="${title}">BBS 社区</h1>
+  <p th:if="${slogan != ''}" th:text="${slogan}">副标题</p>
+  <p class="bbs-hero__stats" th:if="${showStats}">
+    共 <b th:text="${posts.total}">0</b> 篇帖子 · <b th:text="${#lists.size(categories)}">0</b> 个分类
+  </p>
+</section>
+
+<div class="bbs-cols">
+
+  <!-- 左侧：发帖入口 + 分类导航 -->
+  <aside class="bbs-aside">
+    <a class="bbs-start" th:href="@{/uc/bbs/editor}">发布帖子</a>
+    <nav class="bbs-nav">
+      <a class="bbs-nav__item" th:href="@{/bbs}"
+         th:classappend="${currentCategory == ''} ? 'is-active' : ''">
+        <span class="bbs-nav__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </span>
+        <span>全部帖子</span>
+      </a>
+      <a class="bbs-nav__item" th:each="cat : ${categories}"
+         th:href="@{/bbs(category=${cat.slug})}"
+         th:classappend="${currentCategory == cat.slug} ? 'is-active' : ''">
+        <!-- 图标：Console 保存时由 Iconify 解析的内联 SVG，无图标时用色块 -->
+        <span class="bbs-nav__icon" th:if="${!#strings.isEmpty(cat.iconSvg)}"
+              th:style="${cat.color != null ? 'color:' + cat.color : ''}"
+              th:utext="${cat.iconSvg}"></span>
+        <span class="bbs-nav__dot" th:if="${#strings.isEmpty(cat.iconSvg)}"
+              th:style="${cat.color != null ? 'background:' + cat.color : ''}"></span>
+        <span th:text="${cat.displayName}">分类</span>
+        <span class="bbs-nav__count" th:text="${cat.postCount}">0</span>
+      </a>
+    </nav>
+  </aside>
+
+  <!-- 主列表 -->
+  <main>
+    <div class="bbs-sortrow">
+      <span th:if="${keyword == ''}" th:text="|共 ${posts.total} 篇帖子|">共 0 篇帖子</span>
+      <span th:if="${keyword != ''}">
+        搜索 “<b th:text="${keyword}">kw</b>” · <span th:text="${posts.total}">0</span> 条结果
+        &nbsp;<a th:href="@{/bbs(category=${currentCategory})}">清除</a>
+      </span>
+    </div>
+
+    <div class="bbs-list">
+
+      <!-- 公告（仅第一页、非搜索时展示） -->
+      <th:block th:if="${keyword == '' && currentPage == 1}">
+        <div class="bbs-it" th:each="a : ${announcements}">
+          <img class="bbs-ava" th:if="${a.owner != null && !#strings.isEmpty(a.owner.avatar)}"
+               th:src="${a.owner.avatar}" th:alt="${a.owner.displayName}" loading="lazy"/>
+          <span class="bbs-ava bbs-ava--letter"
+                th:if="${a.owner == null || #strings.isEmpty(a.owner.avatar)}"
+                th:text="${a.owner != null ? #strings.substring(a.owner.displayName, 0, 1) : '公'}">管</span>
+          <div class="bbs-it__main">
+            <a class="bbs-it__link" th:href="@{${a.permalink}}">
+              <span class="bbs-it__title" th:text="${a.title}">公告标题</span>
+            </a>
+            <div class="bbs-tags">
+              <span class="bbs-tg bbs-tg--ann">公告</span>
+              <span class="bbs-tg bbs-tg--pin" th:if="${a.pinned}">置顶</span>
+            </div>
+            <p class="bbs-it__excerpt" th:if="${!#strings.isEmpty(a.excerpt)}"
+               th:text="${a.excerpt}">摘要</p>
+            <div class="bbs-it__meta">
+              <a class="bbs-it__author" th:if="${a.owner != null}"
+                 th:href="@{'/bbs/u/' + ${a.owner.name}}"
+                 th:text="${a.owner.displayName}">作者</a>
+              <span th:if="${a.publishTime != null}"
+                    th:text="| 发布于 ${#temporals.format(a.publishTime, 'yyyy-MM-dd')}|"> 发布于</span>
+            </div>
+          </div>
+          <a class="bbs-rc" th:href="@{${a.permalink} + '#comments'}" title="查看评论">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span th:text="${a.commentCount != null ? a.commentCount : 0}">0</span>
+          </a>
+        </div>
+      </th:block>
+
+      <!-- 帖子 -->
+      <div class="bbs-it" th:each="p : ${posts.items}">
+        <img class="bbs-ava" th:if="${p.owner != null && !#strings.isEmpty(p.owner.avatar)}"
+             th:src="${p.owner.avatar}" th:alt="${p.owner.displayName}" loading="lazy"/>
+        <span class="bbs-ava bbs-ava--letter"
+              th:if="${p.owner == null || #strings.isEmpty(p.owner.avatar)}"
+              th:style="${p.category != null && p.category.color != null ? 'background:' + p.category.color : ''}"
+              th:text="${p.owner != null ? #strings.substring(p.owner.displayName, 0, 1) : '匿'}">A</span>
+        <div class="bbs-it__main">
+          <a class="bbs-it__link" th:href="@{${p.permalink}}">
+            <span class="bbs-it__title" th:text="${p.title}">帖子标题</span>
+          </a>
+          <div class="bbs-tags" th:if="${p.category != null || p.pinned}">
+            <span class="bbs-tg" th:if="${p.category != null}"
+                  th:style="${p.category.color != null ? 'background:' + p.category.color : ''}"
+                  th:text="${p.category.displayName}">分类</span>
+            <span class="bbs-tg bbs-tg--pin" th:if="${p.pinned}">置顶</span>
+          </div>
+          <p class="bbs-it__excerpt" th:if="${!#strings.isEmpty(p.excerpt)}"
+             th:text="${p.excerpt}">摘要</p>
+          <div class="bbs-it__meta">
+            <a class="bbs-it__author" th:if="${p.owner != null}"
+               th:href="@{'/bbs/u/' + ${p.owner.name}}"
+               th:text="${p.owner.displayName}">作者</a>
+            <span th:if="${p.publishTime != null}"
+                  th:text="| 发布于 ${#temporals.format(p.publishTime, 'yyyy-MM-dd')}|"> 发布于</span>
+            <span th:if="${p.lastEditTime != null}"> · 已编辑</span>
+          </div>
+        </div>
+        <a class="bbs-rc" th:href="@{${p.permalink} + '#comments'}" title="查看评论">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span th:text="${p.commentCount != null ? p.commentCount : 0}">0</span>
+        </a>
+      </div>
+
+      <!-- 空态 -->
+      <div class="bbs-empty"
+           th:if="${#lists.isEmpty(posts.items) && (keyword != '' || currentPage > 1 || #lists.isEmpty(announcements))}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <p>这里还没有帖子</p>
+      </div>
+    </div>
+
+    <!-- 分页 -->
+    <nav class="bbs-pg" th:if="${posts.total > posts.size}"
+         th:with="totalPages=${(posts.total + posts.size - 1) / posts.size}">
+      <a class="bbs-pg__btn" th:if="${currentPage > 1}"
+         th:href="@{/bbs(page=${currentPage - 1}, category=${currentCategory}, q=${keyword})}">‹ 上一页</a>
+      <span class="bbs-pg__btn is-disabled" th:if="${currentPage <= 1}">‹ 上一页</span>
+      <span class="bbs-pg__info" th:text="|${currentPage} / ${totalPages}|">1 / 1</span>
+      <a class="bbs-pg__btn" th:if="${currentPage < totalPages}"
+         th:href="@{/bbs(page=${currentPage + 1}, category=${currentCategory}, q=${keyword})}">下一页 ›</a>
+      <span class="bbs-pg__btn is-disabled" th:if="${currentPage >= totalPages}">下一页 ›</span>
+    </nav>
+
+    <footer class="bbs-foot">
+      <a th:href="@{/}">← 返回站点首页</a>
+    </footer>
+  </main>
+</div>
+
+<!-- 移动端发帖悬浮按钮（桌面端由左栏按钮承担） -->
+<a class="bbs-fab" th:href="@{/uc/bbs/editor}" aria-label="发布帖子">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 20h9"/>
+    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+  </svg>
+</a>
+
+</body>
+</html>
