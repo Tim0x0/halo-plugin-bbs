@@ -43,10 +43,10 @@ public class BbsPost extends AbstractExtension {
                 description = "永久链接别名，唯一（前台 /bbs/post/{slug}）")
         private String slug;
 
-        @Schema(requiredMode = REQUIRED, description = "类型：公告 / 普通帖子")
+        @Schema(requiredMode = REQUIRED, description = "类型：公告 / 普通帖子 / 问答帖")
         private PostType type = PostType.POST;
 
-        @Schema(description = "所属分类的 metadata.name（公告可不属于任何分类=全站公告）")
+        @Schema(description = "所属分类的 metadata.name（可留空；留空的帖子只在首页显示）")
         private String categoryName;
 
         @Schema(description = "摘要（列表展示用，留空自动从正文截取）", maxLength = 500)
@@ -58,11 +58,20 @@ public class BbsPost extends AbstractExtension {
         @Schema(description = "发布人 User 的 metadata.name")
         private String owner;
 
-        @Schema(description = "是否置顶")
+        @Schema(description = "是否置顶（浮在所属分类页最前；未选分类则浮在首页最前）")
         private Boolean pinned = false;
 
         @Schema(description = "置顶排序优先级，值越大越靠前")
         private Integer pinPriority = 0;
+
+        @Schema(description = "是否允许评论（作者发帖时可设；false 时前台不渲染评论区）")
+        private Boolean allowComment = true;
+
+        @Schema(description = "是否锁定（管理员/版主操作：禁评论且禁作者编辑，前台显示锁定标识）")
+        private Boolean locked = false;
+
+        @Schema(description = "问答帖是否已解决（发帖人与管理员/版主可切换；仅 QUESTION 有意义）")
+        private Boolean solved = false;
 
         @Schema(requiredMode = REQUIRED, description = "状态：草稿 / 待审核 / 已发布 / 已驳回")
         private Phase phase = Phase.DRAFT;
@@ -74,16 +83,22 @@ public class BbsPost extends AbstractExtension {
         @Schema(description = "发布时间")
         private Instant publishTime;
 
+        @Schema(description = "最后活跃时间（发布时=发布时间，收到公开评论时更新；"
+                + "「最后活跃」排序依据，由评论调和器维护）")
+        private Instant lastActivityTime;
+
         @Schema(description = "最后编辑时间（编辑后更新，用于展示『已编辑』）")
         private Instant lastEditTime;
     }
 
-    /** 帖子类型：置顶公告 / 普通帖子。 */
+    /** 帖子类型：公告 / 普通帖子 / 问答帖（与置顶正交：置顶是独立开关，各类帖子均可置顶）。 */
     public enum PostType {
-        /** 公告（前台展示在顶部公告区） */
+        /** 公告（管理员发布的官方帖子：列表混排、带「公告」标识，作用域=所发分类及其子分类） */
         ANNOUNCEMENT,
         /** 普通帖子 */
-        POST
+        POST,
+        /** 问答帖（配合 solved 标记构成提问-解答闭环） */
+        QUESTION
     }
 
     /** 帖子状态：草稿 / 待审核 / 已发布 / 已驳回。 */

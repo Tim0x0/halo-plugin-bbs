@@ -37,6 +37,23 @@ public class BbsFinder {
         return queryService.listPublicPosts(page, size, null, null, null);
     }
 
+    /**
+     * 前台列表统一入口：分类 slug / 标题关键词 / 排序自由组合（传空表示不启用该维度）。
+     * sort 取 {@code active}（最后活跃，默认）/ {@code latest}（最新发布）/
+     * {@code hot}（评论数倒序）。一级分类视图含其全部子分类的帖子；
+     * 置顶帖浮在当前视图最前（占用分页名额，详见查询层说明）。
+     */
+    public Mono<ListResult<BbsPostVo>> list(int page, int size, String categorySlug,
+            String keyword, String sort) {
+        return queryService.listPublicPosts(page, size, null, categorySlug, keyword, sort, null);
+    }
+
+    /** 前台列表（含类型筛选：POST / QUESTION / ANNOUNCEMENT，空=全部）。 */
+    public Mono<ListResult<BbsPostVo>> list(int page, int size, String categorySlug,
+            String keyword, String sort, String type) {
+        return queryService.listPublicPosts(page, size, null, categorySlug, keyword, sort, type);
+    }
+
     /** 按分类 slug 过滤的已发布帖子分页。 */
     public Mono<ListResult<BbsPostVo>> listPostsByCategory(String categorySlug, int page,
             int size) {
@@ -59,6 +76,14 @@ public class BbsFinder {
         return queryService.listLatestPublished(size);
     }
 
+    /**
+     * 某一级分类树内（本级 + 子分类）最新已发布内容——分类 RSS / 时间线场景。
+     * 未选分类的帖子不属于任何分类树，只进全站 feed。
+     */
+    public Flux<BbsPostVo> listLatestByCategory(String categorySlug, int size) {
+        return queryService.listLatestByCategorySlug(categorySlug, size);
+    }
+
     /** 某作者的已发布内容分页（含公告，发布时间倒序）。 */
     public Mono<ListResult<BbsPostVo>> listPostsByOwner(String username, int page, int size) {
         return queryService.listPublicByOwner(username, page, size);
@@ -69,9 +94,14 @@ public class BbsFinder {
         return queryService.getAuthor(username);
     }
 
-    /** 启用中的分类（priority 升序，含已发布帖子数）。 */
+    /** 启用中的分类平铺列表（树序：一级在前、其子紧随；含直属与合计帖子数）。 */
     public Flux<CategoryVo> listCategories() {
         return queryService.listCategories(true);
+    }
+
+    /** 启用中的分类树（仅一级分类，children 内嵌）——前台导航 / 首页分区卡片用。 */
+    public Flux<CategoryVo> listCategoryTree() {
+        return queryService.listCategoryTree(true);
     }
 
     /** 按 slug 取已发布帖子详情（含净化后的正文 HTML）。 */

@@ -1,5 +1,6 @@
 package com.timxs.bbs.reconciler;
 
+import com.timxs.bbs.event.BbsPostChangedEvent;
 import com.timxs.bbs.extension.BbsPost;
 import com.timxs.bbs.search.BbsPostDocumentsProvider;
 import java.util.List;
@@ -48,6 +49,7 @@ public class BbsPostReconciler implements Reconciler<Reconciler.Request> {
                     metadata.getFinalizers().remove(FINALIZER);
                     client.update(post);
                 }
+                eventPublisher.publishEvent(new BbsPostChangedEvent(this));
                 return;
             }
             if (metadata.getFinalizers() == null
@@ -57,6 +59,7 @@ public class BbsPostReconciler implements Reconciler<Reconciler.Request> {
             }
             eventPublisher.publishEvent(new HaloDocumentAddRequestEvent(this,
                     List.of(BbsPostDocumentsProvider.convert(post))));
+            eventPublisher.publishEvent(new BbsPostChangedEvent(this));
         });
         return Result.doNotRetry();
     }

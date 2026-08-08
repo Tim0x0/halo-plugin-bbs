@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { loadIcon, Icon } from '@iconify/vue'
+import { loadIcon } from '@iconify/vue'
 import { VModal, VButton, VSpace, Toast, IconRefreshLine } from '@halo-dev/components'
 import { categoryApi } from '@/api/bbs'
 import type { BbsCategorySpec, CategoryVo, Metadata } from '@/types/bbs'
@@ -9,20 +9,51 @@ import type { BbsCategorySpec, CategoryVo, Metadata } from '@/types/bbs'
  * 分类创建/编辑对话框，对标 Halo 官方分类编辑：分区布局（常规/展示）、slug 自定义
  * 链接（带「按名称重新生成」+ 唯一性预检，后端唯一索引兜底）、Iconify 图标选择器。
  *
- * 保存时把 Iconify 图标名解析为内联 SVG 写入 spec.iconSvg（前台离线渲染用，
- * 运行时不再依赖 api.iconify.design）；解析失败置空并照常保存。
+ * 图标控件对齐 settings.yaml 的公告/置顶图标：format=svg（不设 valueOnly）。
+ * 原因：format=name 时 Halo 触发器只渲染 <Icon :icon>，不读 color，选色后控件仍无色；
+ * format=svg 会把 color 烤进 SVG 文本，触发器 v-html 后即可见（与设置页一致）。
+ *
+ * 保存时拆成：
+ * - spec.icon：图标名（name 字段）
+ * - spec.color：选色 HEX
+ * - spec.iconSvg：currentColor 离线 SVG（前台用 CSS color 着色，不绑死烤色）
  *
  * 事件契约：saved=已保存（父组件刷新列表，不关闭）；close=关闭对话框。
  */
 const props = defineProps<{ category?: CategoryVo }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'saved'): void }>()
 
+/** Halo iconify 非 valueOnly 时的值形态 */
+interface IconifyValue {
+  value?: string
+  name?: string
+  width?: string
+  color?: string
+}
+
 const isUpdate = computed(() => !!props.category)
 const saving = ref(false)
 const formState = ref<BbsCategorySpec>(defaultSpec())
+// 图标选择器绑定对象，保存时再拆到 formState.icon / color
+const iconifyValue = ref<IconifyValue | undefined>()
 // FormKit form 引用：footer 按钮经 node.submit() 走标准提交（required 校验生效）
 const formRef = ref()
 const keepAddingFlag = ref(false)
+// 全量分类（供父级选项与 slug 唯一性预检共用）
+const allCategories = ref<{ name: string; displayName: string; parentName?: string }[]>([])
+
+/** 父级选项：仅一级分类（两级封顶），排除自身 */
+const parentOptions = computed(() => [
+  { label: '无（一级分类）', value: '' },
+  ...allCategories.value
+    .filter((c) => !c.parentName && c.name !== props.category?.name)
+    .map((c) => ({ label: c.displayName, value: c.name })),
+])
+
+/** 自己有子分类时不可再设父级（两级封顶） */
+const hasChildren = computed(() =>
+  allCategories.value.some((c) => c.parentName === props.category?.name)
+)
 
 function defaultSpec(): BbsCategorySpec {
   return {
@@ -31,7 +62,9 @@ function defaultSpec(): BbsCategorySpec {
     description: '',
     icon: '',
     iconSvg: '',
-    color: '#6366f1',
+    color: '',
+    parentName: '',
+    cover: '',
     priority: 0,
     enabled: true,
   }
@@ -42,18 +75,71 @@ function submitForm(keepAdding: boolean) {
   formRef.value?.node.submit()
 }
 
-onMounted(() => {
+/** 合法 HEX 才采纳；空或非法返回空串 */
+function sanitizeHex(color?: string): string {
+  const c = (color || '').trim()
+  return /^#([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/.test(c) ? c : ''
+}
+
+/**
+ * 从 iconify 对象取出图标名。
+ * format=svg 时 value 是 SVG 文本，只能信 name；name 缺失则视为无图标。
+ */
+function iconNameOf(raw?: IconifyValue): string {
+  if (!raw) {
+    return ''
+  }
+  return (raw.name || '').trim()
+}
+
+/** 把 currentColor SVG 临时换成实色，供 format=svg 控件回显（与选色后触发器观感一致） */
+function colorizeSvg(svg: string, color?: string): string {
+  const hex = sanitizeHex(color)
+  if (!svg) {
+    return ''
+  }
+  if (!hex) {
+    return svg
+  }
+  return svg.replace(/currentColor/g, hex)
+}
+
+onMounted(async () => {
   if (props.category) {
+    const icon = props.category.icon || ''
+    const color = sanitizeHex(props.category.color)
+    const iconSvg = props.category.iconSvg || ''
     formState.value = {
       displayName: props.category.displayName,
       slug: props.category.slug,
       description: props.category.description || '',
-      icon: props.category.icon || '',
-      iconSvg: props.category.iconSvg || '',
-      color: props.category.color || '#6366f1',
+      icon,
+      iconSvg,
+      color,
+      parentName: props.category.parentName || '',
+      cover: props.category.cover || '',
       priority: props.category.priority ?? 0,
       enabled: props.category.enabled !== false,
     }
+    // 回显到 iconify（format=svg）：value 必须是 SVG 文本；用 colorize 让触发器带色
+    iconifyValue.value = icon
+      ? {
+          name: icon,
+          value: colorizeSvg(iconSvg, color),
+          color: color || undefined,
+        }
+      : undefined
+  }
+  // 载入分类全集：父级选项 + slug 预检共用
+  try {
+    const { data } = await categoryApi.list({ size: 200 })
+    allCategories.value = (data.items || []).map((it) => ({
+      name: it.metadata.name,
+      displayName: it.spec.displayName,
+      parentName: it.spec.parentName || '',
+    }))
+  } catch {
+    /* 拉取失败仅影响父级选项，请求错误由全局拦截器提示 */
   }
 })
 
@@ -83,7 +169,7 @@ async function slugAvailable(slug: string) {
   }
 }
 
-/** 把 Iconify 图标名解析为自包含 SVG 文本（前台离线渲染）；失败返回空串。 */
+/** 把 Iconify 图标名解析为自包含 SVG 文本（currentColor，前台用 color 着色）；失败返回空串。 */
 async function resolveIconSvg(iconName?: string): Promise<string> {
   const name = (iconName || '').trim()
   if (!name) {
@@ -124,9 +210,28 @@ async function onSubmit() {
     Toast.warning('该别名(slug)已被占用，请更换')
     return
   }
+  // 两级封顶校验：有子分类的分类不可再设父级；父级必须是一级分类
+  if (formState.value.parentName) {
+    if (hasChildren.value) {
+      Toast.warning('该分类下已有子分类，不能再设置父级')
+      return
+    }
+    const parent = allCategories.value.find((c) => c.name === formState.value.parentName)
+    if (parent?.parentName) {
+      Toast.warning('父级必须是一级分类（仅支持两级）')
+      return
+    }
+  }
+  // 从 iconify 对象拆出图标名与颜色；无图标则颜色一并清空
+  const iconName = iconNameOf(iconifyValue.value)
+  const color = iconName ? sanitizeHex(iconifyValue.value?.color) : ''
+  formState.value.icon = iconName
+  formState.value.color = color
+
   saving.value = true
   try {
-    formState.value.iconSvg = await resolveIconSvg(formState.value.icon)
+    // 始终按图标名解析 currentColor SVG，不直接存控件里的烤色 SVG
+    formState.value.iconSvg = await resolveIconSvg(iconName)
     if (isUpdate.value) {
       await categoryApi.patch(props.category!.name, [
         { op: 'replace', path: '/spec', value: formState.value },
@@ -144,6 +249,7 @@ async function onSubmit() {
     emit('saved')
     if (keepAdding && !isUpdate.value) {
       formState.value = defaultSpec()
+      iconifyValue.value = undefined
     } else {
       emit('close')
     }
@@ -173,13 +279,13 @@ async function onSubmit() {
             type="text"
             label="分类名称"
             validation="required"
-            placeholder="如：CS1.6、DNF、插件专区"
+            placeholder="如：技术分享、问答、公告"
           />
           <FormKit
             v-model="formState.slug"
             type="text"
             label="别名 (slug)"
-            help="作为前台分类链接 /bbs?category={slug}，留空将按名称自动生成"
+            help="前台链接 /bbs?category={slug}；留空按名称生成"
           >
             <template #suffix>
               <div v-tooltip="'根据分类名称重新生成'" class="slug-refresh" @click="generateSlug">
@@ -188,6 +294,18 @@ async function onSubmit() {
             </template>
           </FormKit>
           <FormKit v-model="formState.description" type="textarea" label="描述" :rows="2" />
+          <FormKit
+            v-model="formState.parentName"
+            type="select"
+            label="父级分类"
+            :options="parentOptions"
+            :disabled="hasChildren"
+            :help="
+              hasChildren
+                ? '该分类下已有子分类，不能再设置父级（仅支持两级）'
+                : '选择后成为其子分类；仅支持两级'
+            "
+          />
         </div>
       </div>
 
@@ -196,39 +314,23 @@ async function onSubmit() {
           <span class="setting-grid__section">展示</span>
         </div>
         <div class="setting-grid__main">
-          <div class="category-preview">
-            <span
-              class="category-tile"
-              :style="{
-                background: (formState.color || '#6366f1') + '1a',
-                color: formState.color || '#6366f1',
-              }"
-            >
-              <span v-if="formState.icon" class="category-tile__icon">
-                <Icon :icon="formState.icon" />
-              </span>
-              <span
-                v-else
-                class="category-tile__dot"
-                :style="{ background: formState.color || '#6366f1' }"
-              ></span>
-            </span>
-            <span class="category-preview__name">
-              {{ formState.displayName || '分类预览' }}
-            </span>
-          </div>
+          <!-- format=svg：与 settings 公告/置顶图标同款，选色会写入 SVG，触发器可见颜色 -->
           <FormKit
-            v-model="formState.icon"
+            v-model="iconifyValue"
             type="iconify"
-            format="name"
-            :value-only="true"
+            format="svg"
             label="分类图标"
-            help="点击选择 Iconify 图标（保存时解析为离线 SVG），留空则用主题色色点"
+            help="可选颜色；无图标则不设分类色"
           />
           <FormKit
-            v-model="formState.color"
-            type="color"
-            label="主题色（图标着色 / 分类标识色）"
+            v-model="formState.cover"
+            type="attachment"
+            label="封面图"
+            :help="
+              formState.parentName
+                ? '分类页顶部背景；留空继承父分类封面，父级也无则用分类色'
+                : '分类页顶部背景；留空时前台以分类色渐变兜底'
+            "
           />
           <FormKit
             v-model="formState.priority"
@@ -241,7 +343,7 @@ async function onSubmit() {
             v-model="formState.enabled"
             type="switch"
             label="启用"
-            help="停用后前台不再展示该分类"
+            help="停用后前台不展示"
           />
         </div>
       </div>
@@ -303,42 +405,6 @@ async function onSubmit() {
 
 .setting-grid__main > :deep(*) + :deep(*) {
   border-top: 1px solid var(--bbs-border);
-}
-
-.category-preview {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  padding: 0.75rem;
-  border: 1px dashed var(--bbs-border);
-  border-radius: var(--bbs-radius-lg);
-  background: var(--bbs-bg-soft);
-}
-
-.category-preview__name {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--bbs-text);
-}
-
-.category-tile {
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 8px;
-  font-size: 1rem;
-}
-
-.category-tile__icon {
-  display: inline-flex;
-  font-size: 1rem;
-}
-
-.category-tile__dot {
-  width: 0.75rem;
-  height: 0.75rem;
-  border-radius: 4px;
 }
 
 .slug-refresh {

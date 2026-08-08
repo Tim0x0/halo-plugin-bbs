@@ -1,0 +1,12 @@
+# plugin-feed RSS 订阅源扩展点声明（必须）：
+# 来源插件 id 由系统按本 ED 上 Halo 自动打的 plugin.halo.run/plugin-name label 盖章，
+# 缺失本文件时 BbsRssRouteItem 贡献的 RSS 源会被 plugin-feed 整体忽略。
+apiVersion: plugin.halo.run/v1alpha1
+kind: ExtensionDefinition
+metadata:
+  name: bbs-rss-route-item
+spec:
+  className: com.timxs.bbs.integration.BbsRssRouteItem
+  extensionPointName: feed-rss-route-item
+  displayName: "BBS 社区 RSS"
+  description: "把 BBS 社区最新发布的帖子与公告作为 RSS 源贡献给 plugin-feed"

@@ -42,16 +42,21 @@ const size = ref(20)
 const keyword = ref('')
 const phaseFilter = ref<string>()
 const categoryFilter = ref<string>()
+const typeFilter = ref<string>()
 
 // 设置弹窗的分类选项：走公开接口（UC 用户无 Console 权限）
 const categoryOptions = ref<{ label: string; value: string }[]>([])
 
 async function fetchCategories() {
   try {
-    const { data } = await axiosInstance.get<{ name: string; displayName: string }[]>(
-      '/apis/api.bbs.timxs.com/v1alpha1/categories'
-    )
-    categoryOptions.value = data.map((c) => ({ label: c.displayName, value: c.name }))
+    const { data } = await axiosInstance.get<
+      { name: string; displayName: string; parent?: { displayName: string } }[]
+    >('/apis/api.bbs.timxs.com/v1alpha1/categories')
+    // 子分类 label 带父级前缀便于辨识
+    categoryOptions.value = data.map((c) => ({
+      label: c.parent ? `${c.parent.displayName} / ${c.displayName}` : c.displayName,
+      value: c.name,
+    }))
   } catch {
     /* 忽略：分类加载失败不阻塞列表 */
   }
@@ -65,18 +70,25 @@ const phaseItems = computed(() => [
   { label: '草稿', value: 'DRAFT' },
 ])
 
+const typeItems = computed(() => [
+  { label: '全部', value: undefined },
+  { label: '讨论', value: 'POST' },
+  { label: '问答', value: 'QUESTION' },
+])
+
 const categoryItems = computed(() => [
   { label: '全部', value: undefined },
   ...categoryOptions.value.map((c) => ({ label: c.label, value: c.value })),
 ])
 
 const hasFilters = computed(
-  () => !!phaseFilter.value || !!categoryFilter.value || !!keyword.value
+  () => !!phaseFilter.value || !!categoryFilter.value || !!typeFilter.value || !!keyword.value
 )
 
 function resetFilters() {
   phaseFilter.value = undefined
   categoryFilter.value = undefined
+  typeFilter.value = undefined
   keyword.value = ''
 }
 
@@ -89,6 +101,7 @@ async function fetchPosts() {
       keyword: keyword.value.trim() || undefined,
       phase: phaseFilter.value,
       categoryName: categoryFilter.value,
+      type: typeFilter.value,
     })
     posts.value = data.items || []
     total.value = data.total || 0
@@ -104,7 +117,7 @@ function applyFilter() {
   fetchPosts()
 }
 
-watch([keyword, phaseFilter, categoryFilter], applyFilter)
+watch([keyword, phaseFilter, categoryFilter, typeFilter], applyFilter)
 
 function toEditor(name?: string) {
   router.push({ name: 'BbsUcPostEditor', query: name ? { name } : {} })
@@ -118,17 +131,23 @@ const settingForm = ref(defaultPostForm())
 const settingSaving = ref(false)
 
 async function openSetting(post: BbsPostVo) {
+  if (post.locked) {
+    Toast.warning('该帖子已被锁定，无法修改')
+    return
+  }
   try {
     const { data } = await ucApi.getMine(post.name)
     settingPost.value = post
     settingForm.value = {
       title: data.title,
       slug: data.slug || '',
-      type: 'POST',
+      // 回填真实类型（讨论 / 问答可互改；公告在表单中锁定展示）
+      type: data.type || 'POST',
       categoryName: data.category?.name || '',
       autoExcerpt: !data.excerpt,
       excerpt: data.excerpt || '',
       content: data.content || '',
+      allowComment: data.allowComment !== false,
       pinned: false,
       pinPriority: 0,
     }
@@ -145,9 +164,11 @@ async function saveSetting() {
     const { data } = await ucApi.update(settingPost.value!.name, {
       title: f.title,
       slug: f.slug,
+      type: f.type,
       categoryName: f.categoryName,
       excerpt: f.autoExcerpt ? '' : f.excerpt,
       content: f.content,
+      allowComment: f.allowComment,
     })
     Toast.success(data.spec?.phase === 'PENDING' ? '已保存，等待管理员审核' : '已保存')
     settingVisible.value = false
@@ -157,6 +178,30 @@ async function saveSetting() {
   } finally {
     settingSaving.value = false
   }
+}
+
+/** 问答帖已解决切换（发帖人权利；锁定帖由后端拒绝并提示） */
+async function toggleSolved(post: BbsPostVo) {
+  try {
+    if (post.solved) {
+      await ucApi.unsolve(post.name)
+      Toast.success('已取消已解决标记')
+    } else {
+      await ucApi.solve(post.name)
+      Toast.success('已标记为已解决')
+    }
+    await fetchPosts()
+  } catch {
+    /* 请求错误由全局拦截器提示 */
+  }
+}
+
+function toEditorGuarded(post: BbsPostVo) {
+  if (post.locked) {
+    Toast.warning('该帖子已被锁定，无法编辑')
+    return
+  }
+  toEditor(post.name)
 }
 
 function onDelete(post: BbsPostVo) {
@@ -213,6 +258,7 @@ onMounted(() => {
           <VSpace spacing="lg" class="list-toolbar__filters">
             <FilterCleanButton v-if="hasFilters" @click="resetFilters" />
             <FilterDropdown v-model="phaseFilter" label="状态" :items="phaseItems" />
+            <FilterDropdown v-model="typeFilter" label="类型" :items="typeItems" />
             <FilterDropdown v-model="categoryFilter" label="分类" :items="categoryItems" />
             <div v-tooltip="'刷新'" class="refresh-btn" @click="fetchPosts">
               <IconRefreshLine
@@ -253,13 +299,17 @@ onMounted(() => {
                 </template>
                 <template #description>
                   <div class="entity-meta">
-                    <!-- 固定槽位：分类（无分类显示占位），保证各行左缘对齐 -->
+                    <!-- 固定槽位：分类（子分类带父级前缀；无分类显示占位），保证各行左缘对齐 -->
                     <span v-if="post.category" class="entity-category">
                       <span
                         class="entity-category__dot"
                         :style="{ background: post.category.color || '#9ca3af' }"
                       ></span>
-                      {{ post.category.displayName }}
+                      {{
+                        post.category.parent
+                          ? `${post.category.parent.displayName} / ${post.category.displayName}`
+                          : post.category.displayName
+                      }}
                     </span>
                     <span v-else class="entity-category entity-category--none">
                       <span class="entity-category__dot"></span>
@@ -272,7 +322,20 @@ onMounted(() => {
                     >
                       公告
                     </span>
+                    <span
+                      v-if="post.type === 'QUESTION' && !post.solved"
+                      class="bbs-badge bbs-badge--question"
+                    >
+                      问答
+                    </span>
+                    <span
+                      v-if="post.type === 'QUESTION' && post.solved"
+                      class="bbs-badge bbs-badge--solved"
+                    >
+                      已解决
+                    </span>
                     <span v-if="post.pinned" class="bbs-badge bbs-badge--pinned">置顶</span>
+                    <span v-if="post.locked" class="bbs-badge bbs-badge--locked">锁定</span>
                     <span
                       v-if="post.phase === 'REJECTED' && post.rejectReason"
                       class="entity-reject"
@@ -326,10 +389,22 @@ onMounted(() => {
               </VEntityField>
             </template>
             <template #dropdownItems>
-              <VDropdownItem @click="toEditor(post.name)">编辑</VDropdownItem>
-              <VDropdownItem @click="openSetting(post)">设置</VDropdownItem>
+              <VDropdownItem :disabled="post.locked" @click="toEditorGuarded(post)">
+                编辑
+              </VDropdownItem>
+              <VDropdownItem :disabled="post.locked" @click="openSetting(post)">
+                设置
+              </VDropdownItem>
+              <VDropdownItem
+                v-if="post.type === 'QUESTION' && !post.locked"
+                @click="toggleSolved(post)"
+              >
+                {{ post.solved ? '取消已解决' : '标记已解决' }}
+              </VDropdownItem>
               <VDropdownDivider />
-              <VDropdownItem type="danger" @click="onDelete(post)">删除</VDropdownItem>
+              <VDropdownItem type="danger" :disabled="post.locked" @click="onDelete(post)">
+                删除
+              </VDropdownItem>
             </template>
           </VEntity>
         </VEntityContainer>
@@ -501,6 +576,21 @@ onMounted(() => {
 .bbs-badge--pinned {
   background: var(--bbs-accent-bg);
   color: var(--bbs-accent);
+}
+
+.bbs-badge--question {
+  background: rgba(59, 130, 196, 0.12);
+  color: #3b82c4;
+}
+
+.bbs-badge--solved {
+  background: rgba(46, 158, 91, 0.12);
+  color: #2e9e5b;
+}
+
+.bbs-badge--locked {
+  background: var(--bbs-bg-soft);
+  color: var(--bbs-text-muted);
 }
 
 .entity-reject {

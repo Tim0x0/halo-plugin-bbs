@@ -1,5 +1,8 @@
 package com.timxs.bbs.service;
 
+import java.util.Locale;
+import java.util.regex.Pattern;
+import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Safelist;
 
@@ -23,6 +26,10 @@ public final class HtmlSanitizer {
             .addAttributes("a", "target")
             .preserveRelativeLinks(true);
 
+    /** 去掉标签上的内联事件（onclick 等）。 */
+    private static final Pattern ON_ATTR = Pattern.compile(
+            "(?i)\\s+on\\w+\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)");
+
     private HtmlSanitizer() {
     }
 
@@ -34,6 +41,24 @@ public final class HtmlSanitizer {
      */
     public static String clean(String html) {
         return html == null ? null : Jsoup.clean(html, SAFELIST);
+    }
+
+    /**
+     * 清洗设置页 Iconify 输出的 SVG（公告/置顶徽标）。
+     *
+     * <p>仅放行含 {@code <svg} 的片段，拒绝 script / javascript:，并剥离 on* 事件属性。
+     * 非法或空输入返回 null，由调用方回退默认图标。</p>
+     */
+    public static String cleanSvg(String svg) {
+        if (StringUtils.isBlank(svg)) {
+            return null;
+        }
+        var s = svg.strip();
+        var lower = s.toLowerCase(Locale.ROOT);
+        if (!lower.contains("<svg") || lower.contains("<script") || lower.contains("javascript:")) {
+            return null;
+        }
+        return ON_ATTR.matcher(s).replaceAll("");
     }
 
     /**

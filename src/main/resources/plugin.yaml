@@ -6,6 +6,13 @@ metadata:
 spec:
   enabled: true
   requires: ">=2.25.0"
+  # 可选依赖（末尾问号）：interaction-plus 缺席时本插件照常启动，仅相关能力降级。
+  # 注意 semver：预发布版 < 正式版，联调期装机版本为 0.1.0-alpha.7，写 ">=0.1.0" 会判不满足；
+  # 待 interaction-plus 发布 0.1.0 正式版后改回 ">=0.1.0"
+  pluginDependencies:
+    "interaction-plus?": ">=0.1.0-alpha.7"
+    # RSS 改由 plugin-feed 生成（/feed/bbs/posts.xml）；未装 plugin-feed 时 BBS 无 RSS，但不影响启动
+    "PluginFeed?": ">=1.4.0"
   settingName: bbs-settings
   configMapName: bbs-configmap
   author:
@@ -16,7 +23,7 @@ spec:
   repo: https://github.com/Tim0x0/halo-plugin-bbs
   issues: https://github.com/Tim0x0/halo-plugin-bbs/issues
   displayName: "BBS 社区"
-  description: "置顶公告与社区帖子：支持分类（如 CS1.6 / DNF / 插件专区）、Console 管理、用户中心发帖、现代化前台访问页，并向主题开放 Finder 与公开 API。"
+  description: "公告与社区帖子：支持分类（如 技术分享 / 问答 / 公告）、Console 管理、用户中心发帖、现代化前台访问页，并向主题开放 Finder 与公开 API。"
   license:
     - name: "GPL-3.0"
       url: "https://github.com/Tim0x0/halo-plugin-bbs/blob/main/LICENSE"

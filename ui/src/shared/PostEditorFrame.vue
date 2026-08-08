@@ -38,6 +38,8 @@ onMounted(() => {
         gallery: { uploadImage: handleUpload },
         video: { uploadVideo: handleUpload },
         audio: { uploadAudio: handleUpload },
+        // 正文区占位提示：默认是英文，这里覆盖为中文（对标 Halo 官方 DefaultEditor）
+        placeholder: { placeholder: '从这里开始写下正文…' },
       }),
     ],
     parseOptions: { preserveWhitespace: true },

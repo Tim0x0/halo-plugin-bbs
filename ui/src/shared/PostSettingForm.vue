@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { IconRefreshLine } from '@halo-dev/components'
+import { slugify } from 'transliteration'
 import type { PostFormState } from '@/types/bbs'
 
 /**
  * 帖子设置表单（Console / UC 共用），分区布局对标官方文章设置弹窗：
- * 「常规」（类型/分类/别名）、「摘要」、「高级」（置顶，仅管理端）。
+ * 「常规」（类型/分类/别名）、「摘要」、「高级」（允许评论；置顶仅管理端）。
  *
- * managed=true 时展示管理特权字段（类型 / 置顶 / 置顶权重）。
+ * 类型：管理端三选（讨论/问答/公告）；用户侧两选（讨论/问答），
+ * 编辑公告时类型锁定展示（后端亦强制保持，防公告被降级）。
  * 通过 v-model 双向绑定整份 PostFormState（对象引用共享，父组件可直接读取）。
  */
 const props = defineProps<{
@@ -16,18 +18,10 @@ const props = defineProps<{
 
 const form = defineModel<PostFormState>({ required: true })
 
-function slugify(s?: string) {
-  return (s || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, '-')
-    .replace(/[^a-z0-9一-龥-]+/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
+// 别名按标题生成：用 transliteration 把中文等音译为 ASCII（对标 Halo 官方 use-slugify），
+// 不保留中文字符，避免 /bbs/post/{中文} 的 URL 编码。
 function generateSlug() {
-  form.value.slug = slugify(form.value.title)
+  form.value.slug = slugify(form.value.title, { trim: true })
 }
 </script>
 
@@ -44,28 +38,46 @@ function generateSlug() {
           type="radio"
           label="类型"
           :options="[
-            { label: '普通帖子', value: 'POST' },
-            { label: '置顶公告（展示在前台顶部公告区）', value: 'ANNOUNCEMENT' },
+            { label: '讨论', value: 'POST' },
+            { label: '问答', value: 'QUESTION' },
+            { label: '公告', value: 'ANNOUNCEMENT' },
           ]"
+        />
+        <FormKit
+          v-else-if="form.type === 'ANNOUNCEMENT'"
+          v-model="form.type"
+          type="radio"
+          label="类型"
+          disabled
+          :options="[{ label: '公告', value: 'ANNOUNCEMENT' }]"
+          help="公告类型仅管理端可调整"
+        />
+        <FormKit
+          v-else
+          v-model="form.type"
+          type="radio"
+          label="类型"
+          :options="[
+            { label: '讨论', value: 'POST' },
+            { label: '问答', value: 'QUESTION' },
+          ]"
+          help="问答帖可在解决后标记「已解决」"
         />
         <FormKit
           v-model="form.categoryName"
           type="select"
           label="分类"
-          clearable
+          :clearable="form.type === 'ANNOUNCEMENT'"
+          :validation="form.type === 'ANNOUNCEMENT' ? '' : 'required'"
           placeholder="选择分类"
           :options="props.categories"
-          :help="
-            form.type === 'ANNOUNCEMENT'
-              ? '公告可不选分类（作为全站公告）'
-              : '普通帖子建议选择分类'
-          "
+          :help="form.type === 'ANNOUNCEMENT' ? '可不选（不选时只在首页显示）' : '必选'"
         />
         <FormKit
           v-model="form.slug"
           type="text"
           label="别名 (slug)"
-          help="作为前台永久链接 /bbs/post/{slug}，留空自动按标题生成"
+          help="前台链接 /bbs/post/{slug}；留空按标题生成"
         >
           <template #suffix>
             <div v-tooltip="'根据标题重新生成'" class="slug-refresh" @click="generateSlug">
@@ -93,14 +105,21 @@ function generateSlug() {
       </div>
     </div>
 
-    <div v-if="props.managed" class="setting-grid">
+    <div class="setting-grid">
       <div class="setting-grid__aside">
         <span class="setting-grid__section">高级</span>
       </div>
       <div class="setting-grid__main">
-        <FormKit v-model="form.pinned" type="switch" label="置顶" />
         <FormKit
-          v-if="form.pinned"
+          v-model="form.allowComment"
+          type="switch"
+          label="允许评论"
+          help="关闭后前台不再显示评论输入（历史评论保留可见）"
+        />
+        <FormKit v-if="props.managed" v-model="form.pinned" type="switch" label="置顶"
+          help="浮在所属分类页最前（未选分类则浮在首页最前），占用列表位置" />
+        <FormKit
+          v-if="props.managed && form.pinned"
           v-model="form.pinPriority"
           type="number"
           number

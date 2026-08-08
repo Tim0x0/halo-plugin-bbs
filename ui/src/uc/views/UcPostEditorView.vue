@@ -14,6 +14,7 @@ import {
 import PostEditorFrame from '@/shared/PostEditorFrame.vue'
 import PostSettingForm from '@/shared/PostSettingForm.vue'
 import { ucApi } from '@/api/bbs'
+import { slugify } from 'transliteration'
 import { defaultPostForm, type PostRequest } from '@/types/bbs'
 
 /**
@@ -45,11 +46,14 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
 
 async function fetchCategories() {
   try {
-    // 走公开接口取启用中的分类（UC 用户无 Console 权限）
-    const { data } = await axiosInstance.get<{ name: string; displayName: string }[]>(
-      '/apis/api.bbs.timxs.com/v1alpha1/categories'
-    )
-    categories.value = data.map((c) => ({ label: c.displayName, value: c.name }))
+    // 走公开接口取启用中的分类（UC 用户无 Console 权限）；子分类 label 带父级前缀
+    const { data } = await axiosInstance.get<
+      { name: string; displayName: string; parent?: { displayName: string } }[]
+    >('/apis/api.bbs.timxs.com/v1alpha1/categories')
+    categories.value = data.map((c) => ({
+      label: c.parent ? `${c.parent.displayName} / ${c.displayName}` : c.displayName,
+      value: c.name,
+    }))
   } catch {
     /* 忽略：分类加载失败不阻塞发帖 */
   }
@@ -58,14 +62,21 @@ async function fetchCategories() {
 async function loadPost(name: string) {
   try {
     const { data: post } = await ucApi.getMine(name)
+    if (post.locked) {
+      Toast.warning('该帖子已被锁定，无法编辑')
+      router.push({ name: 'BbsUcPosts' })
+      return
+    }
     formData.value = {
       title: post.title,
       slug: post.slug || '',
-      type: 'POST',
+      // 回填真实类型：讨论 / 问答可互改；公告在表单中锁定展示（后端亦强制保持）
+      type: post.type || 'POST',
       categoryName: post.category?.name || '',
       autoExcerpt: !post.excerpt,
       excerpt: post.excerpt || '',
       content: post.content || '',
+      allowComment: post.allowComment !== false,
       pinned: false,
       pinPriority: 0,
     }
@@ -78,10 +89,13 @@ function buildBody(): PostRequest {
   const f = formData.value
   return {
     title: f.title,
-    slug: f.slug,
+    // 留空时按标题生成拼音别名（对标 Halo 官方 use-slugify），避免落到后端中文兜底
+    slug: f.slug.trim() || slugify(f.title, { trim: true }),
+    type: f.type,
     categoryName: f.categoryName,
     excerpt: f.autoExcerpt ? '' : f.excerpt,
     content: f.content,
+    allowComment: f.allowComment,
   }
 }
 

@@ -35,6 +35,8 @@ public class BbsPlugin extends BasePlugin {
                     .unique(true)
                     .nullable(false)
                     .indexFunc(c -> c.getSpec().getSlug()));
+            indexSpecs.add(IndexSpecs.<BbsCategory, String>single("spec.parentName", String.class)
+                    .indexFunc(c -> c.getSpec().getParentName()));
             indexSpecs.add(IndexSpecs.<BbsCategory, Integer>single("spec.priority", Integer.class)
                     .indexFunc(c -> c.getSpec().getPriority()));
             indexSpecs.add(IndexSpecs.<BbsCategory, Boolean>single("spec.enabled", Boolean.class)
@@ -61,6 +63,12 @@ public class BbsPlugin extends BasePlugin {
                     .indexFunc(p -> enumName(p.getSpec().getPhase())));
             indexSpecs.add(IndexSpecs.<BbsPost, Instant>single("spec.publishTime", Instant.class)
                     .indexFunc(p -> p.getSpec().getPublishTime()));
+            // 最后活跃时间：老数据无该字段时回退发布时间，保证「最后活跃」排序无需迁移
+            indexSpecs.add(IndexSpecs.<BbsPost, Instant>single(
+                            "spec.lastActivityTime", Instant.class)
+                    .indexFunc(p -> p.getSpec().getLastActivityTime() != null
+                            ? p.getSpec().getLastActivityTime()
+                            : p.getSpec().getPublishTime()));
             indexSpecs.add(IndexSpecs.<BbsPost, String>single("spec.owner", String.class)
                     .indexFunc(p -> p.getSpec().getOwner()));
         });

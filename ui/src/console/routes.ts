@@ -45,7 +45,8 @@ export const consoleRoutes = [
       component: () => import('@/console/views/PostEditorView.vue'),
       meta: {
         title: '编辑帖子',
-        permissions: ['plugin:bbs:manage'],
+        // 版主（plugin:bbs:moderate）可编辑帖子；完整管理角色的 ui-permissions 已包含该项
+        permissions: ['plugin:bbs:moderate'],
       },
     },
   },

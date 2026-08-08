@@ -10,10 +10,18 @@
   <meta property="og:description" th:if="${!#strings.isEmpty(post.excerpt)}"
         th:content="${post.excerpt}"/>
   <link rel="stylesheet" th:href="@{/plugins/bbs/assets/static/bbs.css}"/>
+  <script th:src="@{/plugins/bbs/assets/static/bbs.js}" defer></script>
+  <!-- 互动装扮（interaction-plus）：样式变量 + 批量取数引导脚本（脚本负责注入 runtime） -->
+  <th:block th:if="${hipEnabled}">
+    <link rel="stylesheet" th:href="@{/plugins/interaction-plus/assets/runtime/interaction-plus.runtime.css}"/>
+    <script th:src="@{/plugins/bbs/assets/static/bbs-hip.js}" defer></script>
+  </th:block>
 </head>
-<body class="bbs-body" th:style="'--b-accent:' + ${accentColor}">
+<!-- has-mreply：移动端启用底部固定「写评论」栏 -->
+<body class="bbs-body has-mreply"
+      th:style="|--b-accent:${accentColor}|">
 
-<!-- 品牌色顶栏 -->
+<!-- 白色顶栏（与列表页一致） -->
 <header class="bbs-hd">
   <div class="bbs-hd__in">
     <a class="bbs-lg" th:href="@{/bbs}">
@@ -27,134 +35,275 @@
       </span>
       <span th:text="${bbsTitle}">BBS 社区</span>
     </a>
+    <span class="bbs-hd__spacer"></span>
     <form class="bbs-hs" method="get" th:action="@{/bbs}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input type="search" name="q" placeholder="搜索帖子…"/>
     </form>
+    <div class="bbs-me bbs-drop" th:if="${me != null}">
+      <button class="bbs-me__btn" type="button" data-drop-toggle aria-label="用户菜单">
+        <img class="bbs-me__ava" th:if="${!#strings.isEmpty(me.avatar)}"
+             th:src="${me.avatar}" th:alt="${me.displayName}"/>
+        <span class="bbs-me__ava bbs-me__ava--letter" th:if="${#strings.isEmpty(me.avatar)}"
+              th:text="${#strings.substring(me.displayName, 0, 1)}">A</span>
+      </button>
+      <div class="bbs-drop__panel">
+        <div class="bbs-menu__name" th:text="${me.displayName}">我</div>
+        <a th:href="@{/console/bbs}" th:if="${hasAdminPermission}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+          后台管理
+        </a>
+        <div class="bbs-menu__div" th:if="${hasAdminPermission}"></div>
+        <a th:href="@{/uc/bbs}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          我的帖子
+        </a>
+        <a th:href="@{/uc/bbs/editor}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          发布帖子
+        </a>
+        <div class="bbs-menu__div"></div>
+        <!-- 退出登录：跳 Halo 自带的 GET /logout 确认页（CSRF 表单由核心渲染） -->
+        <a th:href="@{/logout}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+          退出登录
+        </a>
+      </div>
+    </div>
+    <a class="bbs-me__login" th:if="${me == null}"
+       th:href="@{/login(redirect_uri=${requestPath})}">登录</a>
   </div>
 </header>
 
-<div class="bbs-cols bbs-cols--narrow">
-  <main>
-    <!-- 面包屑 -->
-    <nav class="bbs-crumbs">
-      <a th:href="@{/bbs}" th:text="${bbsTitle}">BBS 社区</a>
-      <span>/</span>
-      <a th:if="${post.category != null}"
-         th:href="@{/bbs(category=${post.category.slug})}"
+<!-- Hero：面包屑（完整分类路径）+ 状态徽标 + 标题（Flarum DiscussionHero）。
+     分类路径由面包屑承担；徽标行只放状态（置顶图标 / 公告 / 问答 / 已解决 / 锁定） -->
+<section class="bbs-phero">
+  <div class="bbs-phero__in">
+  <nav class="bbs-phero__crumb">
+    <a th:href="@{/bbs}">全部帖子</a>
+    <th:block th:if="${post.category != null and post.category.parent != null}">
+      <span>›</span>
+      <a th:href="@{/bbs(category=${post.category.parent.slug})}"
+         th:text="${post.category.parent.displayName}">父分类</a>
+    </th:block>
+    <th:block th:if="${post.category != null}">
+      <span>›</span>
+      <a th:href="@{/bbs(category=${post.category.slug})}"
          th:text="${post.category.displayName}">分类</a>
-      <span th:if="${post.category == null && post.type == 'ANNOUNCEMENT'}">全站公告</span>
-      <span th:if="${post.category == null && post.type != 'ANNOUNCEMENT'}">帖子</span>
-    </nav>
+    </th:block>
+  </nav>
+  <!-- 标记行（spec §2.2 B 套）：分类 Tag + 圆标（公告/置顶/问答），无锁；
+       问答圆标始终显示（解决与否都有，解决另有绿 tip） -->
+  <div class="bbs-phero__marks"
+       th:if="${post.category != null || post.pinned || post.type == 'ANNOUNCEMENT' || post.type == 'QUESTION'}">
+    <a class="bbs-stag" th:if="${post.category != null and post.category.parent != null}"
+       th:href="@{/bbs(category=${post.category.parent.slug})}"
+       th:style="|--c1:${post.category.parent.color};--c2:${post.category.color}|">
+      <span class="bbs-stag__p" th:text="${post.category.parent.displayName}">父分类</span>
+      <span class="bbs-stag__c" th:text="${post.category.displayName}">分类</span>
+    </a>
+    <a class="bbs-stag bbs-stag--solo" th:if="${post.category != null and post.category.parent == null}"
+       th:href="@{/bbs(category=${post.category.slug})}"
+       th:style="|--c1:${post.category.color}|">
+      <span class="bbs-stag__p" th:text="${post.category.displayName}">分类</span>
+    </a>
+    <span class="bbs-bic bbs-bic--ann" th:if="${post.type == 'ANNOUNCEMENT'}" title="公告" aria-label="公告"><svg viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M480 32c0-12.9-7.8-24.6-19.8-29.6s-25.7-2.2-34.9 6.9L381.7 53c-48 48-113.1 75-181 75l-8.7 0-32 0-96 0c-35.3 0-64 28.7-64 64l0 96c0 35.3 28.7 64 64 64l0 128c0 17.7 14.3 32 32 32l64 0c17.7 0 32-14.3 32-32l0-128 8.7 0c67.9 0 133 27 181 75l43.6 43.6c9.2 9.2 22.9 11.9 34.9 6.9s19.8-16.6 19.8-29.6l0-147.6c18.6-8.8 32-32.5 32-60.4s-13.4-51.6-32-60.4L480 32z"/></svg></span>
+    <span class="bbs-bic bbs-bic--pin" th:if="${post.pinned}" title="置顶" aria-label="置顶"><svg viewBox="0 0 384 512" fill="currentColor" aria-hidden="true"><path d="M32 32C32 14.3 46.3 0 64 0L320 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-29.5 0 11.4 148.2c36.7 19.9 65.7 53.2 79.5 94.7l1 3c3.3 9.8 1.6 20.5-4.4 28.8s-15.7 13.3-26 13.3L32 352c-10.3 0-19.9-4.9-26-13.3s-7.7-19-4.4-28.8l1-3c13.8-41.5 42.8-74.8 79.5-94.7L93.5 64 64 64C46.3 64 32 49.7 32 32zM160 384l64 0 0 96c0 17.7-14.3 32-32 32s-32-14.3-32-32l0-96z"/></svg></span>
+    <span class="bbs-bic bbs-bic--qa" th:if="${post.type == 'QUESTION'}" title="问答" aria-label="问答"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.4 8a3.6 3.6 0 1 1 5.3 3.1c-1 .55-1.7 1.3-1.7 2.6v.9"/><circle cx="12" cy="18.6" r="1.6" fill="currentColor" stroke="none"/></svg></span>
+  </div>
+  <h1 class="bbs-phero__title">
+    <span class="bbs-lock-inline" th:if="${post.locked}" title="已锁定" aria-label="已锁定"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="2"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/></svg></span>
+    <span th:text="${post.title}">标题</span>
+  </h1>
+  </div>
+</section>
 
-    <article class="bbs-article">
-      <h1 class="bbs-article__title" th:text="${post.title}">标题</h1>
+<!-- 已解决绿 tip（spec §2.2：问答帖解决后，标题下独立状态条） -->
+<div class="bbs-notice bbs-notice--ok" th:if="${post.type == 'QUESTION' and post.solved}">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
+  该问题已解决
+</div>
 
-      <div class="bbs-article__head" th:if="${post.owner != null}">
-        <img class="bbs-ava" th:if="${!#strings.isEmpty(post.owner.avatar)}"
-             th:src="${post.owner.avatar}" th:alt="${post.owner.displayName}"/>
-        <span class="bbs-ava bbs-ava--letter" th:if="${#strings.isEmpty(post.owner.avatar)}"
-              th:text="${#strings.substring(post.owner.displayName, 0, 1)}">A</span>
-        <div class="bbs-article__who">
-          <a class="bbs-article__name" th:href="@{'/bbs/u/' + ${post.owner.name}}"
-             th:text="${post.owner.displayName}">作者</a>
-          <div class="bbs-article__meta">
-            <span th:if="${post.publishTime != null}"
-                  th:text="${#temporals.format(post.publishTime, 'yyyy-MM-dd HH:mm')}">时间</span>
-            <span class="bbs-article__edited" th:if="${post.lastEditTime != null}"
-                  th:title="${#temporals.format(post.lastEditTime, 'yyyy-MM-dd HH:mm')}">已编辑</span>
-            <a class="bbs-article__cmt" href="#comments"
-               th:text="|${post.commentCount != null ? post.commentCount : 0} 条评论|">0 条评论</a>
-          </div>
+<div class="bbs-pcols">
+  <!-- 帖子流：楼主为第一楼，评论区（评论组件渲染）顺延融入，同一背景无卡片 -->
+  <main class="bbs-stream">
+    <article class="bbs-post">
+      <!-- 头像为悬浮名片触发器（interaction-plus 启用后点击弹卡）；昵称保持链接跳作者页。
+           未注册时两层包装均 display:contents，原生头像直接显示 -->
+      <hip-user-card th:if="${post.owner != null}" th:attr="user-name=${post.owner.name}">
+        <hip-user-avatar size="48px" th:attr="user-name=${post.owner.name}">
+          <img class="bbs-ava bbs-ava--lg" th:if="${!#strings.isEmpty(post.owner.avatar)}"
+               th:src="${post.owner.avatar}" th:alt="${post.owner.displayName}"/>
+          <span class="bbs-ava bbs-ava--lg bbs-ava--letter"
+                th:if="${#strings.isEmpty(post.owner.avatar)}"
+                th:text="${#strings.substring(post.owner.displayName, 0, 1)}">A</span>
+        </hip-user-avatar>
+      </hip-user-card>
+      <span class="bbs-ava bbs-ava--lg bbs-ava--letter" th:if="${post.owner == null}">匿</span>
+
+      <div class="bbs-post__main">
+        <div class="bbs-post__head">
+          <!-- 作者链接同列表：authorLinkTemplate 空则纯文本；头像仍走名片 -->
+          <th:block th:if="${post.owner != null}"
+                    th:with="authorHref=${!#strings.isEmpty(authorLinkTemplate)
+                        ? #strings.replace(authorLinkTemplate, '{name}',
+                            #uris.escapePathSegment(post.owner.name))
+                        : ''}">
+            <a class="bbs-post__name" th:if="${!#strings.isEmpty(authorHref)}"
+               th:href="${authorHref}">
+              <hip-user-identity th:attr="user-name=${post.owner.name}">
+                <span th:text="${post.owner.displayName}">作者</span>
+              </hip-user-identity>
+            </a>
+            <span class="bbs-post__name" th:if="${#strings.isEmpty(authorHref)}">
+              <hip-user-identity th:attr="user-name=${post.owner.name}">
+                <span th:text="${post.owner.displayName}">作者</span>
+              </hip-user-identity>
+            </span>
+          </th:block>
+          <span class="bbs-post__name" th:if="${post.owner == null}">匿名</span>
+          <span class="bbs-op">楼主</span>
+          <span class="bbs-post__time">
+            <th:block th:if="${post.publishTime != null}">发布于
+              <time class="bbs-time" th:attr="datetime=${post.publishTime}"
+                    th:text="${#temporals.format(post.publishTime, dateFormat)}">时间</time>
+            </th:block>
+            <span class="bbs-edited" th:if="${post.lastEditTime != null}"
+                  th:title="|编辑于 ${#temporals.format(post.lastEditTime, dateFormat)}|">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+              <span>已编辑</span>
+            </span>
+          </span>
         </div>
-        <div class="bbs-article__tags">
-          <span class="bbs-tg bbs-tg--ann" th:if="${post.type == 'ANNOUNCEMENT'}">公告</span>
-          <span class="bbs-tg bbs-tg--pin" th:if="${post.pinned}">置顶</span>
-          <span class="bbs-tg" th:if="${post.category != null}"
-                th:style="${post.category.color != null ? 'background:' + post.category.color : ''}"
-                th:text="${post.category.displayName}">分类</span>
+
+        <!-- 正文：写入时已经服务端白名单净化，此处安全输出 -->
+        <div class="prose" th:utext="${post.content}">正文</div>
+
+        <!-- 帖子级动作（仅作者可见）：问答帖的已解决切换（调 UC API，bbs.js 处理）。
+             分享按钮在右栏（桌面）与底部固定栏（移动端） -->
+        <div class="bbs-post__foot"
+             th:if="${me != null and post.owner != null and me.name == post.owner.name
+                 and post.type == 'QUESTION' and !post.locked}">
+          <button type="button" class="js-solve"
+                  th:attr="data-post-name=${post.name}, data-solved=${post.solved}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>
+            </svg>
+            <span th:text="${post.solved} ? '取消已解决' : '标记已解决'">标记已解决</span>
+          </button>
         </div>
       </div>
-
-      <!-- 目录：仅当正文标题（h2/h3）≥ 3 个时由脚本填充并显示 -->
-      <details class="bbs-toc" id="bbsToc" hidden open>
-        <summary>目录</summary>
-        <nav class="bbs-toc__list"></nav>
-      </details>
-
-      <!-- 正文：写入时已经服务端白名单净化，此处安全输出 -->
-      <div class="prose" th:utext="${post.content}">正文</div>
     </article>
 
-    <!-- 评论区：列表页评论数直达此锚点；渲染由 Halo 评论组件插件负责 -->
-    <section class="post-comments" id="comments">
-      <div class="post-comments__head">
+    <!-- 评论区：正常状态渲染 Halo 评论组件，透明融入帖子流（无卡片）；
+         列表页评论数直达此锚点，移动端底部栏亦跳转到这里。
+         锁定 / 关闭评论：评论组件为 shadow DOM 无法隐藏其输入框，
+         故直接不渲染组件，历史评论改由 bbs.js 走 Halo 公开评论 API 只读渲染 -->
+    <section class="bbs-cmts" id="comments">
+      <div class="bbs-cmts__head">
         <b th:text="${post.commentCount != null ? post.commentCount : 0}">0</b> 条评论
       </div>
-      <halo:comment group="bbs.timxs.com" kind="BbsPost" th:attr="name=${post.name}" />
+      <div class="bbs-cmts__closed" th:if="${post.locked}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.35"
+             stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="2"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/></svg>
+        该帖已锁定，不能回复
+      </div>
+      <div class="bbs-cmts__closed" th:if="${!post.locked and !post.allowComment}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="m2 2 20 20"/></svg>
+        作者已关闭回复
+      </div>
+      <div id="bbsRoComments" th:if="${post.locked or !post.allowComment}"
+           th:attr="data-post-name=${post.name}"></div>
+      <halo:comment th:unless="${post.locked or !post.allowComment}"
+                    group="bbs.timxs.com" kind="BbsPost" th:attr="name=${post.name}" />
     </section>
 
-    <!-- 相关推荐：同分类最新帖子（公告为全站最新），读完有去处 -->
+    <!-- 相关推荐：同分类最新帖子（公告为全站最新），条数由设置 relatedPostCount 控制 -->
     <section class="bbs-related" th:if="${!#lists.isEmpty(relatedPosts)}">
-      <div class="bbs-related__head"
-           th:text="${post.category != null ? '更多「' + post.category.displayName + '」的帖子' : '更多帖子'}">更多帖子</div>
+      <div class="bbs-related__head" th:switch="${relatedStrategy}">
+        <span th:case="'category-latest'"
+              th:text="${post.category != null ? '更多「' + post.category.displayName + '」的帖子' : '更多帖子'}">更多帖子</span>
+        <span th:case="'latest'">最新帖子</span>
+        <span th:case="'most-reply'">最多回复的帖子</span>
+        <span th:case="'same-author'"
+              th:text="${post.owner != null ? '更多「' + post.owner.displayName + '」的帖子' : '更多帖子'}">更多帖子</span>
+        <span th:case="'relevance'">相关推荐</span>
+        <span th:case="*"
+              th:text="${post.category != null ? '更多「' + post.category.displayName + '」的帖子' : '更多帖子'}">更多帖子</span>
+      </div>
       <a class="bbs-related__row" th:each="r : ${relatedPosts}" th:href="@{${r.permalink}}">
         <span class="bbs-related__title" th:text="${r.title}">标题</span>
+        <!-- 相关推荐右侧时间保持紧凑 MM-dd，不跟全局 dateFormat（避免 yyyy-MM-dd HH:mm 撑破窄列） -->
         <span class="bbs-related__time" th:if="${r.publishTime != null}"
               th:text="${#temporals.format(r.publishTime, 'MM-dd')}">01-01</span>
       </a>
     </section>
-
-    <footer class="bbs-foot">
-      <a th:href="@{/bbs}">← 返回 <span th:text="${bbsTitle}">BBS 社区</span></a>
-    </footer>
   </main>
+
+  <!-- 右栏：回复按钮 + 分享 + 目录（enableToc 且正文 h2/h3 ≥ 3 时由 bbs.js 填充；移动端整栏隐藏） -->
+  <aside class="bbs-pside">
+    <a class="bbs-start" th:if="${post.allowComment and !post.locked}" href="#comments">回复帖子</a>
+    <span class="bbs-start is-disabled" th:if="${post.locked}">已锁定</span>
+    <span class="bbs-start is-disabled" th:if="${!post.locked and !post.allowComment}">评论已关闭</span>
+    <!-- 分享=复制链接（纯前端，bbs.js 处理） -->
+    <button type="button" class="bbs-side-share js-share">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+        <path d="m8.6 10.6 6.8-4.2M8.6 13.4l6.8 4.2"/>
+      </svg>
+      <span>分享</span>
+    </button>
+    <div class="bbs-side-toc" id="bbsSideToc" th:if="${enableToc}">
+      <div class="bbs-side-toc__head">目录</div>
+      <nav class="bbs-side-toc__list"></nav>
+    </div>
+  </aside>
 </div>
 
-<script>
-(function () {
-  // 条件目录：正文 h2/h3 ≥ 3 个才生成（短帖无感）
-  var prose = document.querySelector('.prose');
-  var toc = document.getElementById('bbsToc');
-  if (prose && toc) {
-    var heads = prose.querySelectorAll('h2, h3');
-    if (heads.length >= 3) {
-      var list = toc.querySelector('.bbs-toc__list');
-      heads.forEach(function (h, i) {
-        if (!h.id) h.id = 'sec-' + (i + 1);
-        var a = document.createElement('a');
-        a.href = '#' + h.id;
-        a.textContent = h.textContent;
-        a.className = 'bbs-toc__item' + (h.tagName === 'H3' ? ' bbs-toc__item--sub' : '');
-        list.appendChild(a);
-      });
-      toc.hidden = false;
-    }
-  }
+<!-- 页脚（与列表页一致） -->
+<footer class="bbs-foot">
+  <p th:if="${!#strings.isEmpty(footerNotice)}" th:text="${footerNotice}">声明</p>
+  <p>
+    © <span th:text="${year}">2026</span>
+    <a th:href="@{/}" th:text="${siteTitle}">站点名称</a>
+    · Powered by
+    <a href="https://github.com/Tim0x0/halo-plugin-bbs" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      <span>bbs</span>
+    </a>
+  </p>
+</footer>
 
-  // 图片灯箱：点击正文图片放大，点击遮罩或 Esc 关闭
-  var imgs = document.querySelectorAll('.prose img');
-  if (imgs.length) {
-    var overlay = document.createElement('div');
-    overlay.className = 'bbs-lightbox';
-    overlay.innerHTML = '<img alt=""/>';
-    document.body.appendChild(overlay);
-    var big = overlay.querySelector('img');
-    imgs.forEach(function (img) {
-      img.classList.add('bbs-zoomable');
-      img.addEventListener('click', function () {
-        big.src = img.currentSrc || img.src;
-        overlay.classList.add('on');
-      });
-    });
-    overlay.addEventListener('click', function () { overlay.classList.remove('on'); });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') overlay.classList.remove('on');
-    });
-  }
-})();
-</script>
+<!-- 移动端底部固定栏：回复主按钮 + 分享图标按钮（右栏移动端隐藏，分享入口收在这里） -->
+<div class="bbs-mreply">
+  <a class="bbs-mreply__in" href="#comments"
+     th:classappend="${post.locked or !post.allowComment} ? 'is-disabled' : ''">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+    <span th:text="${post.locked ? '已锁定' : (!post.allowComment ? '评论已关闭' : '回复帖子')}">回复帖子</span>
+  </a>
+  <button type="button" class="bbs-mreply__share js-share" aria-label="分享">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+      <path d="m8.6 10.6 6.8-4.2M8.6 13.4l6.8 4.2"/>
+    </svg>
+  </button>
+</div>
 
 </body>
 </html>

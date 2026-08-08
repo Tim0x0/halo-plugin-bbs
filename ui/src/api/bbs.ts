@@ -60,6 +60,18 @@ export const consoleApi = {
   unpinPost(name: string) {
     return axiosInstance.put(`${CONSOLE_BASE}/bbsposts/${name}/unpin`)
   },
+  lockPost(name: string) {
+    return axiosInstance.put(`${CONSOLE_BASE}/bbsposts/${name}/lock`)
+  },
+  unlockPost(name: string) {
+    return axiosInstance.put(`${CONSOLE_BASE}/bbsposts/${name}/unlock`)
+  },
+  solvePost(name: string) {
+    return axiosInstance.put(`${CONSOLE_BASE}/bbsposts/${name}/solve`)
+  },
+  unsolvePost(name: string) {
+    return axiosInstance.put(`${CONSOLE_BASE}/bbsposts/${name}/unsolve`)
+  },
   deletePost(name: string) {
     return axiosInstance.delete(`${CONSOLE_BASE}/bbsposts/${name}`)
   },
@@ -77,6 +89,7 @@ export const ucApi = {
     keyword?: string
     phase?: string
     categoryName?: string
+    type?: string
   }) {
     return axiosInstance.get<ListResult<BbsPostVo>>(`${UC_BASE}/bbsposts/mine`, { params })
   },
@@ -88,6 +101,12 @@ export const ucApi = {
   },
   update(name: string, body: PostRequest) {
     return axiosInstance.put<BbsPost>(`${UC_BASE}/bbsposts/${name}`, body)
+  },
+  solve(name: string) {
+    return axiosInstance.put(`${UC_BASE}/bbsposts/${name}/solve`)
+  },
+  unsolve(name: string) {
+    return axiosInstance.put(`${UC_BASE}/bbsposts/${name}/unsolve`)
   },
   delete(name: string) {
     return axiosInstance.delete(`${UC_BASE}/bbsposts/${name}`)

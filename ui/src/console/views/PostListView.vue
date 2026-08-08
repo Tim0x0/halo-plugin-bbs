@@ -43,7 +43,8 @@ const PHASE_LABELS: Record<string, string> = {
 
 const TYPE_LABELS: Record<string, string> = {
   ANNOUNCEMENT: '公告',
-  POST: '帖子',
+  POST: '讨论',
+  QUESTION: '问答',
 }
 
 const router = useRouter()
@@ -106,15 +107,16 @@ const isAllSelected = computed(
   () => posts.value.length > 0 && posts.value.every((p) => selected.value.includes(p.name))
 )
 
-// 查看/管理两级权限：只读用户（plugin:bbs:view）隐藏全部管理操作
-const canManage = utils.permission.has(['plugin:bbs:manage'])
+// 帖子管理操作（审核/置顶/锁定/已解决/删除）对版主开放；分类管理仍需完整管理权限
+const canModerate = utils.permission.has(['plugin:bbs:moderate'])
 
 async function fetchCategories() {
   try {
     const { data } = await consoleApi.listCategories()
     const map: Record<string, string> = {}
     ;(data || []).forEach((c) => {
-      map[c.name] = c.displayName
+      // 树序平铺；子分类 label 带父级前缀便于辨识
+      map[c.name] = c.parent ? `${c.parent.displayName} / ${c.displayName}` : c.displayName
     })
     categoryMap.value = map
   } catch {
@@ -171,7 +173,16 @@ function toggleSelectAll() {
 
 async function doAction(
   name: string,
-  op: 'publish' | 'unpublish' | 'approve' | 'pin' | 'unpin',
+  op:
+    | 'publish'
+    | 'unpublish'
+    | 'approve'
+    | 'pin'
+    | 'unpin'
+    | 'lock'
+    | 'unlock'
+    | 'solve'
+    | 'unsolve',
   okText: string
 ) {
   try {
@@ -179,7 +190,11 @@ async function doAction(
     else if (op === 'unpublish') await consoleApi.unpublishPost(name)
     else if (op === 'approve') await consoleApi.approvePost(name)
     else if (op === 'pin') await consoleApi.pinPost(name)
-    else await consoleApi.unpinPost(name)
+    else if (op === 'unpin') await consoleApi.unpinPost(name)
+    else if (op === 'lock') await consoleApi.lockPost(name)
+    else if (op === 'unlock') await consoleApi.unlockPost(name)
+    else if (op === 'solve') await consoleApi.solvePost(name)
+    else await consoleApi.unsolvePost(name)
     Toast.success(okText)
     await fetchPosts()
   } catch {
@@ -296,6 +311,7 @@ function openSetting(post: BbsPostVo) {
     autoExcerpt: !post.excerpt,
     excerpt: post.excerpt || '',
     content: '',
+    allowComment: post.allowComment !== false,
     pinned: !!post.pinned,
     pinPriority: post.pinPriority || 0,
   }
@@ -315,8 +331,13 @@ async function saveSetting() {
       { op: 'add', path: '/spec/type', value: f.type },
       { op: 'add', path: '/spec/categoryName', value: f.categoryName || null },
       { op: 'add', path: '/spec/excerpt', value: f.autoExcerpt ? '' : f.excerpt },
+      { op: 'add', path: '/spec/allowComment', value: f.allowComment },
       { op: 'add', path: '/spec/pinned', value: f.pinned },
       { op: 'add', path: '/spec/pinPriority', value: f.pinPriority },
+      // 改出问答类型时清掉已解决残留，避免改回问答后凭空「已解决」
+      ...(f.type !== 'QUESTION'
+        ? [{ op: 'add', path: '/spec/solved', value: false } as const]
+        : []),
     ])
     Toast.success('已保存')
     settingModalVisible.value = false
@@ -355,7 +376,7 @@ onMounted(() => {
       <VButton v-permission="['plugin:bbs:manage']" size="sm" :route="{ name: 'BbsCategories' }">
         分类管理
       </VButton>
-      <VButton v-permission="['plugin:bbs:manage']" type="secondary" @click="toEditor()">
+      <VButton v-permission="['plugin:bbs:moderate']" type="secondary" @click="toEditor()">
         <template #icon><IconAddCircle /></template>
         写帖子
       </VButton>
@@ -368,7 +389,7 @@ onMounted(() => {
         <div class="list-toolbar">
           <div class="list-toolbar__check">
             <input
-              v-permission="['plugin:bbs:manage']"
+              v-permission="['plugin:bbs:moderate']"
               type="checkbox"
               class="bbs-checkbox"
               :checked="isAllSelected"
@@ -406,7 +427,7 @@ onMounted(() => {
           <template #actions>
             <VSpace>
               <VButton @click="fetchPosts">刷新</VButton>
-              <VButton v-permission="['plugin:bbs:manage']" type="secondary" @click="toEditor()">
+              <VButton v-permission="['plugin:bbs:moderate']" type="secondary" @click="toEditor()">
                 <template #icon><IconAddCircle /></template>
                 写帖子
               </VButton>
@@ -423,7 +444,7 @@ onMounted(() => {
           >
             <template #checkbox>
               <input
-                v-permission="['plugin:bbs:manage']"
+                v-permission="['plugin:bbs:moderate']"
                 type="checkbox"
                 class="bbs-checkbox"
                 :checked="selected.includes(post.name)"
@@ -434,7 +455,7 @@ onMounted(() => {
               <VEntityField
                 :title="post.title"
                 max-width="30rem"
-                :route="canManage ? { name: 'BbsPostEditor', query: { name: post.name } } : undefined"
+                :route="canModerate ? { name: 'BbsPostEditor', query: { name: post.name } } : undefined"
               >
                 <template #extra>
                   <a
@@ -449,13 +470,17 @@ onMounted(() => {
                 </template>
                 <template #description>
                   <div class="entity-meta">
-                    <!-- 固定槽位：分类（无分类显示占位），保证各行左缘对齐 -->
+                    <!-- 固定槽位：分类（子分类带父级前缀；无分类显示占位），保证各行左缘对齐 -->
                     <span v-if="post.category" class="entity-category">
                       <span
                         class="entity-category__dot"
                         :style="{ background: post.category.color || '#9ca3af' }"
                       ></span>
-                      {{ post.category.displayName }}
+                      {{
+                        post.category.parent
+                          ? `${post.category.parent.displayName} / ${post.category.displayName}`
+                          : post.category.displayName
+                      }}
                     </span>
                     <span v-else class="entity-category entity-category--none">
                       <span class="entity-category__dot"></span>
@@ -468,7 +493,26 @@ onMounted(() => {
                     >
                       公告
                     </span>
+                    <span
+                      v-if="post.type === 'QUESTION' && !post.solved"
+                      class="bbs-badge bbs-badge--question"
+                    >
+                      问答
+                    </span>
+                    <span
+                      v-if="post.type === 'QUESTION' && post.solved"
+                      class="bbs-badge bbs-badge--solved"
+                    >
+                      已解决
+                    </span>
                     <span v-if="post.pinned" class="bbs-badge bbs-badge--pinned">置顶</span>
+                    <span v-if="post.locked" class="bbs-badge bbs-badge--locked">锁定</span>
+                    <span
+                      v-if="post.allowComment === false"
+                      class="bbs-badge bbs-badge--locked"
+                    >
+                      评论关闭
+                    </span>
                     <span
                       v-if="post.lastEditTime"
                       v-tooltip="formatTime(post.lastEditTime)"
@@ -534,7 +578,7 @@ onMounted(() => {
                 </template>
               </VEntityField>
             </template>
-            <template v-if="canManage" #dropdownItems>
+            <template v-if="canModerate" #dropdownItems>
               <VDropdownItem @click="toEditor(post.name)">编辑</VDropdownItem>
               <VDropdownItem @click="openSetting(post)">设置</VDropdownItem>
               <VDropdownDivider />
@@ -562,6 +606,26 @@ onMounted(() => {
               <VDropdownItem v-else @click="doAction(post.name, 'pin', '已置顶')">
                 置顶
               </VDropdownItem>
+              <VDropdownItem
+                v-if="post.locked"
+                @click="doAction(post.name, 'unlock', '已解锁')"
+              >
+                解锁
+              </VDropdownItem>
+              <VDropdownItem v-else @click="doAction(post.name, 'lock', '已锁定')">
+                锁定
+              </VDropdownItem>
+              <template v-if="post.type === 'QUESTION'">
+                <VDropdownItem
+                  v-if="post.solved"
+                  @click="doAction(post.name, 'unsolve', '已取消已解决标记')"
+                >
+                  取消已解决
+                </VDropdownItem>
+                <VDropdownItem v-else @click="doAction(post.name, 'solve', '已标记为已解决')">
+                  标记已解决
+                </VDropdownItem>
+              </template>
               <VDropdownDivider />
               <VDropdownItem type="danger" @click="onDelete(post)">删除</VDropdownItem>
             </template>
@@ -820,5 +884,20 @@ onMounted(() => {
 .bbs-badge--pinned {
   background: var(--bbs-accent-bg);
   color: var(--bbs-accent);
+}
+
+.bbs-badge--question {
+  background: rgba(59, 130, 196, 0.12);
+  color: #3b82c4;
+}
+
+.bbs-badge--solved {
+  background: rgba(46, 158, 91, 0.12);
+  color: #2e9e5b;
+}
+
+.bbs-badge--locked {
+  background: var(--bbs-bg-soft);
+  color: var(--bbs-text-muted);
 }
 </style>

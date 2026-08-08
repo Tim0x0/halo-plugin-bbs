@@ -19,7 +19,8 @@ public class PostRequest {
     @Schema(description = "别名，留空自动生成", maxLength = 200)
     private String slug;
 
-    @Schema(description = "类型（仅管理端可指定；用户中心固定为 POST）")
+    @Schema(description = "类型（用户中心可选 POST / QUESTION；公告仅管理端可指定，"
+            + "且用户侧编辑公告时类型保持不变）")
     private BbsPost.PostType type;
 
     @Schema(description = "所属分类的 metadata.name")
@@ -30,6 +31,9 @@ public class PostRequest {
 
     @Schema(description = "正文 HTML（服务端会做白名单净化）")
     private String content;
+
+    @Schema(description = "是否允许评论（作者可设；null 表示不修改，新建默认允许）")
+    private Boolean allowComment;
 
     @Schema(description = "是否置顶（仅管理端）")
     private Boolean pinned;

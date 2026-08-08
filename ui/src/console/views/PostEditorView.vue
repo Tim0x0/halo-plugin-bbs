@@ -16,6 +16,7 @@ import {
 import PostEditorFrame from '@/shared/PostEditorFrame.vue'
 import PostSettingForm from '@/shared/PostSettingForm.vue'
 import { consoleApi } from '@/api/bbs'
+import { slugify } from 'transliteration'
 import { defaultPostForm, type PostRequest } from '@/types/bbs'
 
 /**
@@ -50,7 +51,11 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
 async function fetchCategories() {
   try {
     const { data } = await consoleApi.listCategories()
-    categories.value = (data || []).map((c) => ({ label: c.displayName, value: c.name }))
+    // 树序平铺（后端保证父在前）；子分类 label 带父级前缀便于辨识
+    categories.value = (data || []).map((c) => ({
+      label: c.parent ? `${c.parent.displayName} / ${c.displayName}` : c.displayName,
+      value: c.name,
+    }))
   } catch {
     /* 忽略：分类加载失败不阻塞编辑 */
   }
@@ -67,6 +72,7 @@ async function loadPost(name: string) {
       autoExcerpt: !post.excerpt,
       excerpt: post.excerpt || '',
       content: post.content || '',
+      allowComment: post.allowComment !== false,
       pinned: !!post.pinned,
       pinPriority: post.pinPriority || 0,
     }
@@ -80,11 +86,13 @@ function buildBody(): PostRequest {
   const f = formData.value
   return {
     title: f.title,
-    slug: f.slug,
+    // 留空时按标题生成拼音别名（对标 Halo 官方 use-slugify），避免落到后端中文兜底
+    slug: f.slug.trim() || slugify(f.title, { trim: true }),
     type: f.type,
     categoryName: f.categoryName,
     excerpt: f.autoExcerpt ? '' : f.excerpt,
     content: f.content,
+    allowComment: f.allowComment,
     pinned: f.pinned,
     pinPriority: f.pinPriority,
   }

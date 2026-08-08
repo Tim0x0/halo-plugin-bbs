@@ -4,80 +4,217 @@ metadata:
   name: bbs-settings
 spec:
   forms:
-    - group: base
-      label: 基础
-      formSchema:
-        - $formkit: number
-          name: pageSize
-          label: 帖子列表每页条数
-          value: 10
-          min: 1
-          max: 50
-        - $formkit: number
-          name: announcementCount
-          label: 首页公告展示条数
-          value: 3
-          min: 1
-          max: 10
+    # ------------------------------------------------------------------
+    # 外观：品牌 / Hero / SEO·页脚
+    # ConfigMap 键 appearance —— 组内用 $formkit:group 分段（存盘为嵌套 JSON）
+    # ------------------------------------------------------------------
     - group: appearance
       label: 外观
       formSchema:
-        - $formkit: text
-          name: pageTitle
-          label: 前台页面标题
-          value: "BBS 社区"
-        - $formkit: attachmentInput
-          name: logo
-          label: 社区 Logo
-          help: 展示在前台顶栏；留空显示默认图标
-          accepts:
-            - "image/*"
-          value: ""
-        - $formkit: text
-          name: slogan
-          label: 社区副标题
-          help: 展示在 Hero 标题下方，可与统计信息同时展示
-          value: ""
-        - $formkit: color
-          name: accentColor
-          label: 前台主题色
-          help: 前台顶栏 / Hero / 按钮的品牌色
-          value: "#4d698e"
-        - $formkit: select
-          name: heroStyle
-          id: hero_style
-          label: Hero 背景
-          value: "color"
-          options:
-            - label: 纯色（使用前台主题色）
+        - $formkit: group
+          name: brand
+          label: 品牌
+          children:
+            - $formkit: text
+              name: pageTitle
+              label: 前台页面标题
+              value: "BBS 社区"
+            - $formkit: attachmentInput
+              name: logo
+              label: 社区 Logo
+              help: 展示在前台顶栏；留空显示默认图标
+              accepts:
+                - "image/*"
+              value: ""
+            - $formkit: text
+              name: slogan
+              label: 社区副标题
+              help: 展示在 Hero 标题下方，并用作列表页 meta description
+              value: ""
+            - $formkit: color
+              name: accentColor
+              label: 前台主题色
+              help: 顶栏、Hero、按钮、置顶徽标等
+              value: "#4d698e"
+
+        - $formkit: group
+          name: hero
+          label: Hero
+          children:
+            - $formkit: switch
+              name: showHero
+              id: show_hero
+              label: 显示 Hero 区
+              help: 关闭后列表页不展示标题横幅
+              value: true
+            - $formkit: select
+              if: "$get(show_hero).value === true"
+              name: heroStyle
+              id: hero_style
+              label: Hero 背景
               value: "color"
-            - label: 图片 Banner
-              value: "image"
-        - $formkit: attachmentInput
-          if: "$get(hero_style).value === 'image'"
-          name: bannerImage
-          label: Banner 图片
-          help: 建议宽度 ≥ 1600px，自动叠加深色遮罩保证文字可读
-          accepts:
-            - "image/*"
-          value: ""
-        - $formkit: switch
-          name: showStats
-          label: 显示统计信息
-          help: 在 Hero 区显示「共 N 篇帖子 · M 个分类」，与副标题可同时展示
-          value: true
-    - group: moderation
-      label: 审核
+              options:
+                - label: 纯色（主题色）
+                  value: "color"
+                - label: 图片 Banner
+                  value: "image"
+            - $formkit: attachmentInput
+              if: "$get(show_hero).value === true && $get(hero_style).value === 'image'"
+              name: bannerImage
+              label: Banner 图片
+              help: 建议宽度 ≥ 1600px
+              accepts:
+                - "image/*"
+              value: ""
+            - $formkit: switch
+              if: "$get(show_hero).value === true"
+              name: showStats
+              label: 显示统计信息
+              help: 在 Hero 区显示帖子数与分类数
+              value: true
+
+        - $formkit: group
+          name: seo
+          label: 页脚
+          children:
+            - $formkit: textarea
+              name: footerNotice
+              label: 页脚声明
+              help: 展示在前台页脚；清空则不显示
+              value: "本社区内容由用户发布，不代表站点立场"
+
+    # ------------------------------------------------------------------
+    # 浏览：列表 / 详情 / RSS
+    # ------------------------------------------------------------------
+    - group: browsing
+      label: 浏览
+      formSchema:
+        - $formkit: group
+          name: list
+          label: 列表
+          children:
+            - $formkit: number
+              name: pageSize
+              label: 帖子列表每页条数
+              value: 10
+              min: 1
+              max: 50
+              validation: min:1|max:50
+            - $formkit: switch
+              name: listShowExcerpt
+              label: 列表显示摘要
+              help: 在标题下方展示摘要（单行截断）
+              value: false
+            - $formkit: select
+              name: dateFormat
+              label: 时间显示格式
+              help: 列表与详情的时间格式
+              value: "yyyy-MM-dd"
+              options:
+                - label: 2026-07-30
+                  value: "yyyy-MM-dd"
+                - label: 2026-07-30 14:30
+                  value: "yyyy-MM-dd HH:mm"
+                - label: 07-30
+                  value: "MM-dd"
+
+        - $formkit: group
+          name: detail
+          label: 详情
+          children:
+            - $formkit: number
+              name: relatedPostCount
+              label: 相关推荐条数
+              help: 详情页底部推荐数量；0 为关闭
+              value: 5
+              min: 0
+              max: 20
+              validation: min:0|max:20
+            - $formkit: select
+              name: relatedPostStrategy
+              label: 相关推荐方式
+              help: 详情页底部推荐的排序策略
+              value: "category-latest"
+              options:
+                - label: 同分类最新
+                  value: "category-latest"
+                - label: 全站最新
+                  value: "latest"
+                - label: 最多回复
+                  value: "most-reply"
+                - label: 同作者
+                  value: "same-author"
+                - label: 相关度
+                  value: "relevance"
+            - $formkit: switch
+              name: enableToc
+              label: 显示正文目录
+              help: 正文 h2/h3 不少于 3 个时自动生成
+              value: true
+
+        - $formkit: group
+          name: rss
+          label: RSS
+          children:
+            - $formkit: number
+              name: rssSize
+              label: RSS 条目数
+              help: 需先安装 plugin-feed；控制 /feed/bbs/posts.xml 的条目数
+              value: 20
+              min: 1
+              max: 100
+              validation: min:1|max:100
+
+    # ------------------------------------------------------------------
+    # 内容：发帖约束 + 审核
+    # ------------------------------------------------------------------
+    - group: content
+      label: 内容
+      formSchema:
+        - $formkit: group
+          name: posting
+          label: 发帖约束
+          children:
+            - $formkit: number
+              name: titleMaxLength
+              label: 标题最大长度
+              help: 按字符计；超出拒绝保存
+              value: 100
+              min: 10
+              max: 200
+              validation: min:10|max:200
+
+        - $formkit: group
+          name: review
+          label: 审核
+          children:
+            - $formkit: switch
+              name: requireReview
+              id: require_review
+              label: 用户发帖需审核
+              help: 开启后用户中心发帖须审核通过才展示；后台发布不受影响
+              value: false
+            - $formkit: switch
+              if: "$get(require_review).value === true"
+              name: reviewOnEdit
+              label: 编辑已发布内容需重新审核
+              help: 编辑已发布的帖子需重新审核
+              value: true
+
+    # ------------------------------------------------------------------
+    # 集成：互动增强（字段少，无需再嵌 group）
+    # ------------------------------------------------------------------
+    - group: integration
+      label: 集成
       formSchema:
         - $formkit: switch
-          name: requireReview
-          id: require_review
-          label: 用户发帖需审核
-          help: 开启后，用户在用户中心发布的帖子须管理员审核通过后才会展示；关闭则发布即生效。管理员在后台发布不受影响
+          name: enableInteractionPlus
+          id: enable_interaction_plus
+          label: 接入互动增强
+          help: 需先启用 interaction-plus。开启后展示装扮，作者链接优先用其用户卡跳转
           value: false
-        - $formkit: switch
-          if: "$get(require_review).value === true"
-          name: reviewOnEdit
-          label: 编辑已发布内容需重新审核
-          help: 开启（默认）：已过审帖子被编辑后退回待审核，防止“过审后改内容”绕过；关闭：已过审帖子的编辑直接生效（请结合社区信任度决定）。新发布与被驳回后的重新提交始终需要审核
-          value: true
+        - $formkit: text
+          name: authorLinkTemplate
+          label: 作者链接模板
+          help: "{name} 替换为用户名；留空则作者名不跳转"
+          value: "/authors/{name}"

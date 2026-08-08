@@ -48,7 +48,7 @@ public class BbsUcEndpoint implements CustomEndpoint {
         return SpringdocRouteBuilder.route()
                 .GET("/bbsposts/mine", this::listMine, builder -> builder
                         .operationId("ListMyBbsPosts").tag(TAG)
-                        .description("我的帖子列表（可选 phase / 标题关键词）")
+                        .description("我的帖子列表（可选 phase / type / 标题关键词）")
                         .parameter(parameterBuilder().name("page").in(ParameterIn.QUERY)
                                 .required(false).implementation(Integer.class))
                         .parameter(parameterBuilder().name("size").in(ParameterIn.QUERY)
@@ -58,6 +58,8 @@ public class BbsUcEndpoint implements CustomEndpoint {
                         .parameter(parameterBuilder().name("phase").in(ParameterIn.QUERY)
                                 .required(false).implementation(String.class))
                         .parameter(parameterBuilder().name("categoryName").in(ParameterIn.QUERY)
+                                .required(false).implementation(String.class))
+                        .parameter(parameterBuilder().name("type").in(ParameterIn.QUERY)
                                 .required(false).implementation(String.class))
                         .response(responseBuilder().implementation(
                                 ListResult.generateGenericClass(BbsPostVo.class))))
@@ -74,11 +76,19 @@ public class BbsUcEndpoint implements CustomEndpoint {
                         .response(responseBuilder().implementation(BbsPost.class)))
                 .PUT("/bbsposts/{name}", this::updateMine, builder -> builder
                         .operationId("UpdateMyBbsPost").tag(TAG)
-                        .description("更新我的帖子（越权 403）")
+                        .description("更新我的帖子（越权 403；锁定帖不可编辑）")
                         .parameter(nameParam())
                         .requestBody(requestBodyBuilder().content(contentBuilder()
                                 .schema(schemaBuilder().implementation(PostRequest.class))))
                         .response(responseBuilder().implementation(BbsPost.class)))
+                .PUT("/bbsposts/{name}/solve", this::solveMine, builder -> builder
+                        .operationId("SolveMyBbsPost").tag(TAG)
+                        .description("标记我的问答帖为已解决（越权 403，仅问答帖）")
+                        .parameter(nameParam()))
+                .PUT("/bbsposts/{name}/unsolve", this::unsolveMine, builder -> builder
+                        .operationId("UnsolveMyBbsPost").tag(TAG)
+                        .description("取消我的问答帖已解决标记（越权 403，仅问答帖）")
+                        .parameter(nameParam()))
                 .DELETE("/bbsposts/{name}", this::deleteMine, builder -> builder
                         .operationId("DeleteMyBbsPost").tag(TAG)
                         .description("删除我的帖子（越权 403）")
@@ -99,7 +109,8 @@ public class BbsUcEndpoint implements CustomEndpoint {
                         intParam(request, "size", 20),
                         request.queryParam("keyword").orElse(null),
                         request.queryParam("phase").orElse(null),
-                        request.queryParam("categoryName").orElse(null)))
+                        request.queryParam("categoryName").orElse(null),
+                        request.queryParam("type").orElse(null)))
                 .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 
@@ -121,6 +132,20 @@ public class BbsUcEndpoint implements CustomEndpoint {
         return Mono.zip(request.bodyToMono(PostRequest.class), currentUsername())
                 .flatMap(tuple -> postService.update(
                         request.pathVariable("name"), tuple.getT1(), tuple.getT2(), false))
+                .flatMap(post -> ServerResponse.ok().bodyValue(post));
+    }
+
+    private Mono<ServerResponse> solveMine(ServerRequest request) {
+        return currentUsername()
+                .flatMap(username -> postService.setSolvedOwned(
+                        request.pathVariable("name"), username, true))
+                .flatMap(post -> ServerResponse.ok().bodyValue(post));
+    }
+
+    private Mono<ServerResponse> unsolveMine(ServerRequest request) {
+        return currentUsername()
+                .flatMap(username -> postService.setSolvedOwned(
+                        request.pathVariable("name"), username, false))
                 .flatMap(post -> ServerResponse.ok().bodyValue(post));
     }
 

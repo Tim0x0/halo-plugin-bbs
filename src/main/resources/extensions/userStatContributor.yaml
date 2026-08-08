@@ -1,0 +1,12 @@
+# interaction-plus 统计贡献扩展点声明（必须）：
+# 来源插件 id 由系统按本 ED 上 Halo 自动打的 plugin.halo.run/plugin-name label 盖章，
+# 缺失本文件时 BbsUserStatContributor 的贡献项会被 interaction-plus 整体忽略。
+apiVersion: plugin.halo.run/v1alpha1
+kind: ExtensionDefinition
+metadata:
+  name: bbs-user-stat-contributor
+spec:
+  className: com.timxs.bbs.integration.BbsUserStatContributor
+  extensionPointName: user-stat-contributor
+  displayName: "BBS 发帖统计"
+  description: "把用户在 BBS 社区的发帖数贡献到 interaction-plus 的用户悬浮卡与公开身份数据中"

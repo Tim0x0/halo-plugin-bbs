@@ -102,6 +102,23 @@ public class BbsConsoleEndpoint implements CustomEndpoint {
                         req -> ok(postService.unpin(req.pathVariable("name"))),
                         builder -> builder.operationId("UnpinBbsPost").tag(TAG)
                                 .description("取消置顶").parameter(nameParam()))
+                .PUT("/bbsposts/{name}/lock",
+                        req -> ok(postService.lock(req.pathVariable("name"))),
+                        builder -> builder.operationId("LockBbsPost").tag(TAG)
+                                .description("锁定（禁评论、禁作者编辑与删除）")
+                                .parameter(nameParam()))
+                .PUT("/bbsposts/{name}/unlock",
+                        req -> ok(postService.unlock(req.pathVariable("name"))),
+                        builder -> builder.operationId("UnlockBbsPost").tag(TAG)
+                                .description("解锁").parameter(nameParam()))
+                .PUT("/bbsposts/{name}/solve",
+                        req -> ok(postService.setSolved(req.pathVariable("name"), true)),
+                        builder -> builder.operationId("SolveBbsPost").tag(TAG)
+                                .description("标记已解决（仅问答帖）").parameter(nameParam()))
+                .PUT("/bbsposts/{name}/unsolve",
+                        req -> ok(postService.setSolved(req.pathVariable("name"), false)),
+                        builder -> builder.operationId("UnsolveBbsPost").tag(TAG)
+                                .description("取消已解决（仅问答帖）").parameter(nameParam()))
                 .DELETE("/bbsposts/{name}",
                         req -> postService.delete(req.pathVariable("name"), null)
                                 .then(ServerResponse.ok().build()),

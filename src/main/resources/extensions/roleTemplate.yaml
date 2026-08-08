@@ -18,7 +18,43 @@ rules:
     resources: ["*"]
     verbs: ["get", "list"]
 ---
-# BBS 社区管理：帖子/公告/分类的全部管理能力（依赖查看角色）
+# BBS 社区版主：帖子管理（审核 / 锁定 / 置顶 / 标记已解决 / 删帖），
+# 不含分类管理（bbs.timxs.com 组无写权限）与插件设置；依赖查看角色补足只读能力
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: bbs-moderate
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/dependencies: |
+      ["bbs-view"]
+    rbac.authorization.halo.run/module: "BBS 社区"
+    rbac.authorization.halo.run/display-name: "BBS 社区版主"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:bbs:view", "plugin:bbs:moderate"]
+rules:
+  # Halo RBAC 不支持 "resource/*" 通配（仅 "*"、精确 "res/sub"、"*/sub"），子资源须显式枚举
+  - apiGroups: ["console.api.bbs.timxs.com"]
+    resources:
+      - "bbsposts"
+      - "bbsposts/publish"
+      - "bbsposts/unpublish"
+      - "bbsposts/approve"
+      - "bbsposts/reject"
+      - "bbsposts/pin"
+      - "bbsposts/unpin"
+      - "bbsposts/lock"
+      - "bbsposts/unlock"
+      - "bbsposts/solve"
+      - "bbsposts/unsolve"
+    verbs: ["*"]
+  # 设置弹窗 / 批量设分类走 CRUD PATCH（仅帖子，不含分类写权限）
+  - apiGroups: ["bbs.timxs.com"]
+    resources: ["bbsposts"]
+    verbs: ["update", "patch", "delete"]
+---
+# BBS 社区管理：版主能力 + 分类管理 + 全部管理接口（依赖查看与版主角色）
 apiVersion: v1alpha1
 kind: Role
 metadata:
@@ -27,11 +63,11 @@ metadata:
     halo.run/role-template: "true"
   annotations:
     rbac.authorization.halo.run/dependencies: |
-      ["bbs-view"]
+      ["bbs-view", "bbs-moderate"]
     rbac.authorization.halo.run/module: "BBS 社区"
     rbac.authorization.halo.run/display-name: "BBS 社区管理"
     rbac.authorization.halo.run/ui-permissions: |
-      ["plugin:bbs:view", "plugin:bbs:manage"]
+      ["plugin:bbs:view", "plugin:bbs:moderate", "plugin:bbs:manage"]
 rules:
   - apiGroups: ["bbs.timxs.com"]
     resources: ["bbsposts", "bbscategories"]
@@ -57,6 +93,10 @@ rules:
   - apiGroups: ["uc.api.bbs.timxs.com"]
     resources: ["bbsposts"]
     verbs: ["create", "get", "list", "update", "delete"]
+  # 问答帖已解决切换是子资源路径（/bbsposts/{name}/solve|unsolve），需单独授权
+  - apiGroups: ["uc.api.bbs.timxs.com"]
+    resources: ["bbsposts/solve", "bbsposts/unsolve"]
+    verbs: ["update"]
 ---
 # 公开读：前台浏览已发布帖子/公告/分类（聚合到匿名 + 登录用户）
 apiVersion: v1alpha1

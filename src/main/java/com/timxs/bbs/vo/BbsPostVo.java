@@ -24,7 +24,7 @@ public class BbsPostVo {
 
     private String slug;
 
-    /** ANNOUNCEMENT=公告，POST=普通帖子 */
+    /** ANNOUNCEMENT=公告，POST=普通帖子，QUESTION=问答帖 */
     private String type;
 
     /** DRAFT=草稿，PUBLISHED=已发布 */
@@ -33,6 +33,15 @@ public class BbsPostVo {
     private Boolean pinned;
 
     private Integer pinPriority;
+
+    /** 是否允许评论（false 时前台不渲染评论区） */
+    private Boolean allowComment;
+
+    /** 是否已锁定（禁评论、禁作者编辑；前台显示锁定标识） */
+    private Boolean locked;
+
+    /** 问答帖是否已解决（仅 QUESTION 有意义） */
+    private Boolean solved;
 
     /** 驳回原因（仅 REJECTED 状态有值，Console / UC 展示用） */
     private String rejectReason;
@@ -55,6 +64,9 @@ public class BbsPostVo {
     private OwnerVo owner;
 
     private Instant publishTime;
+
+    /** 最后活跃时间（发布或收到公开评论时更新；「最后活跃」排序依据） */
+    private Instant lastActivityTime;
 
     private Instant lastEditTime;
 

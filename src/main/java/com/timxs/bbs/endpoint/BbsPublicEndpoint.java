@@ -41,12 +41,15 @@ public class BbsPublicEndpoint implements CustomEndpoint {
         return SpringdocRouteBuilder.route()
                 .GET("/posts", this::listPosts, builder -> builder
                         .operationId("ListBbsPostsPublic").tag(TAG)
-                        .description("已发布普通帖子分页（置顶优先；可按分类 name/slug 与关键词过滤）")
+                        .description("已发布内容分页（置顶按作用域浮顶；可按分类 name/slug、"
+                                + "关键词、类型过滤；sort=active|latest|hot，默认最后活跃）")
                         .parameter(queryParam("page", Integer.class))
                         .parameter(queryParam("size", Integer.class))
                         .parameter(queryParam("categoryName", String.class))
                         .parameter(queryParam("categorySlug", String.class))
                         .parameter(queryParam("keyword", String.class))
+                        .parameter(queryParam("sort", String.class))
+                        .parameter(queryParam("type", String.class))
                         .response(responseBuilder().implementation(
                                 ListResult.generateGenericClass(BbsPostVo.class))))
                 .GET("/posts/{slug}", this::getPost, builder -> builder
@@ -79,7 +82,9 @@ public class BbsPublicEndpoint implements CustomEndpoint {
                         size,
                         request.queryParam("categoryName").orElse(null),
                         request.queryParam("categorySlug").orElse(null),
-                        request.queryParam("keyword").orElse(null))
+                        request.queryParam("keyword").orElse(null),
+                        request.queryParam("sort").orElse(null),
+                        request.queryParam("type").orElse(null))
                 .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 

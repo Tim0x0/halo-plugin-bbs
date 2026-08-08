@@ -105,11 +105,19 @@ function openEdit(category: CategoryVo) {
 
 function onDelete(category: CategoryVo) {
   const count = category.postCount || 0
+  const childCount = category.children?.length || 0
+  const parts: string[] = []
+  if (count > 0) {
+    parts.push(`下还有 ${count} 篇已发布帖子，删除后这些帖子将变为无分类`)
+  }
+  if (childCount > 0) {
+    parts.push(`其 ${childCount} 个子分类将变为一级分类`)
+  }
   Dialog.warning({
     title: '删除分类',
     description:
-      count > 0
-        ? `「${category.displayName}」下还有 ${count} 篇已发布帖子，删除后这些帖子将变为无分类。确定删除吗？`
+      parts.length > 0
+        ? `「${category.displayName}」${parts.join('；')}。确定删除吗？`
         : `确定删除「${category.displayName}」吗？`,
     confirmType: 'danger',
     onConfirm: async () => {
@@ -135,7 +143,7 @@ onMounted(fetchCategories)
     <template #actions>
       <VButton size="sm" :route="{ name: 'BbsPosts' }">
         <template #icon><IconArrowLeft /></template>
-        返回帖子列表
+        返回
       </VButton>
       <VButton size="sm" @click="fetchCategories">
         <template #icon><IconRefreshLine /></template>
@@ -152,7 +160,7 @@ onMounted(fetchCategories)
     <VCard :body-class="['!p-0']">
       <VLoading v-if="loading" />
       <Transition v-else-if="categories.length === 0" appear name="fade">
-        <VEmpty title="暂无分类" message="创建分类（如 CS1.6、DNF、插件专区）来组织帖子">
+        <VEmpty title="暂无分类" message="创建分类（如 技术分享、问答、公告）来组织帖子">
           <template #actions>
             <VButton type="secondary" @click="openCreate">
               <template #icon><IconAddCircle /></template>
@@ -167,7 +175,10 @@ onMounted(fetchCategories)
             v-for="(category, index) in categories"
             :key="category.name"
             class="category-row"
-            :class="{ 'category-row--dragging': dragIndex === index }"
+            :class="{
+              'category-row--dragging': dragIndex === index,
+              'category-row--child': !!category.parentName,
+            }"
             :draggable="canDrag"
             @dragstart="onDragStart(index)"
             @dragover.prevent
@@ -175,16 +186,26 @@ onMounted(fetchCategories)
             @dragend="onDragEnd"
           >
             <template #start>
+              <VEntityField v-if="category.parentName">
+                <template #description>
+                  <span class="category-branch">└</span>
+                </template>
+              </VEntityField>
               <VEntityField>
                 <template #description>
                   <span
                     class="category-tile"
-                    :style="{
-                      background: (category.color || '#6366f1') + '1a',
-                      color: category.color || '#6366f1',
-                    }"
+                    :class="{ 'category-tile--muted': !category.color }"
+                    :style="
+                      category.color
+                        ? {
+                            background: category.color + '1a',
+                            color: category.color,
+                          }
+                        : undefined
+                    "
                   >
-                    <!-- 优先离线 SVG（保存时解析），回退 Iconify 在线组件，最后色点 -->
+                    <!-- 优先离线 SVG（保存时解析），回退 Iconify 在线组件，最后色点/占位 -->
                     <span
                       v-if="category.iconSvg"
                       class="category-tile__svg"
@@ -196,10 +217,11 @@ onMounted(fetchCategories)
                       class="category-tile__icon"
                     />
                     <span
-                      v-else
+                      v-else-if="category.color"
                       class="category-tile__dot"
-                      :style="{ background: category.color || '#6366f1' }"
+                      :style="{ background: category.color }"
                     ></span>
+                    <span v-else class="category-tile__placeholder">—</span>
                   </span>
                 </template>
               </VEntityField>
@@ -210,9 +232,13 @@ onMounted(fetchCategories)
               </VEntityField>
             </template>
             <template #end>
-              <VEntityField width="6rem">
+              <VEntityField width="8rem">
                 <template #description>
-                  <span class="category-count">{{ category.postCount || 0 }} 篇帖子</span>
+                  <span class="category-count">
+                    {{ category.postCount || 0 }} 篇帖子<template
+                      v-if="!category.parentName && (category.totalPostCount || 0) > (category.postCount || 0)"
+                    >（含子分类 {{ category.totalPostCount }}）</template>
+                  </span>
                 </template>
               </VEntityField>
               <VEntityField width="5rem">
@@ -269,6 +295,11 @@ onMounted(fetchCategories)
   font-size: 1rem;
 }
 
+.category-tile--muted {
+  background: var(--bbs-bg-soft);
+  color: var(--bbs-text-muted);
+}
+
 .category-tile__svg {
   display: inline-flex;
 }
@@ -289,6 +320,11 @@ onMounted(fetchCategories)
   border-radius: 4px;
 }
 
+.category-tile__placeholder {
+  font-size: 0.75rem;
+  color: var(--bbs-text-muted);
+}
+
 .category-slug {
   margin-left: 0.375rem;
   font-size: 0.75rem;
@@ -306,5 +342,15 @@ onMounted(fetchCategories)
 
 .category-row--dragging {
   opacity: 0.5;
+}
+
+/* 子分类：缩进 + 分支符（后端返回树序平铺，父行在前、子行紧随） */
+.category-row--child {
+  padding-left: 1.25rem;
+}
+
+.category-branch {
+  color: var(--bbs-text-faint);
+  font-size: 0.875rem;
 }
 </style>
