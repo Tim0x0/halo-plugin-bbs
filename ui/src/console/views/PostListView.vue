@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { refDebounced } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import { utils } from '@halo-dev/ui-shared'
 import {
@@ -15,50 +16,74 @@ import {
   VEntity,
   VEntityField,
   VAvatar,
-  VStatusDot,
+  VDropdown,
   VDropdownItem,
   VDropdownDivider,
   Toast,
   Dialog,
   IconAddCircle,
   IconRefreshLine,
-  IconExternalLinkLine,
 } from '@halo-dev/components'
 import RiMegaphoneLine from '~icons/ri/megaphone-line'
-import RiChat1Line from '~icons/ri/chat-1-line'
-import { consoleApi, postCrudApi } from '@/api/bbs'
-import { defaultPostForm, type BbsPostVo } from '@/types/bbs'
+import RiDeleteBinLine from '~icons/ri/delete-bin-line'
+import { consoleApi } from '@/api/bbs'
+import { useRouteQuery } from '@vueuse/router'
+import { BBS_PHASE_LABELS, BBS_TYPE_LABELS } from '@/utils/post-labels'
+import { formatTime, timeAgo } from '@/utils/date'
+import {
+  defaultPostForm,
+  postFormFrom,
+  type BbsPostVo,
+  type CategoryVo,
+} from '@/types/bbs'
 import PostSettingModal from '@/console/components/PostSettingModal.vue'
+import PostCommentListModal from '@/console/components/PostCommentListModal.vue'
+import CategoryFilterDropdown from '@/console/components/CategoryFilterDropdown.vue'
+import UserFilterDropdown from '@/console/components/UserFilterDropdown.vue'
+import PostEntityStart from '@/shared/PostEntityStart.vue'
+import PostStatusEnd from '@/shared/PostStatusEnd.vue'
+import PostCommentsField from '@/shared/PostCommentsField.vue'
+import PostLockField from '@/shared/PostLockField.vue'
+import BbsCategorySelect from '@/shared/BbsCategorySelect.vue'
+import PostModerationRecords from '@/shared/PostModerationRecords.vue'
 
 /**
  * Console 帖子管理列表，对标官方文章列表：服务端筛选（状态/类型/分类/标题关键词/排序）、
  * 批量删除、行内快捷操作（置顶/发布切换）、设置弹窗仅改 spec 元数据。
  */
-const PHASE_LABELS: Record<string, string> = {
-  DRAFT: '草稿',
-  PENDING: '待审核',
-  PUBLISHED: '已发布',
-  REJECTED: '已驳回',
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  ANNOUNCEMENT: '公告',
-  POST: '讨论',
-  QUESTION: '问答',
-}
-
 const router = useRouter()
 const loading = ref(false)
 const posts = ref<BbsPostVo[]>([])
 const total = ref(0)
-const page = ref(1)
-const size = ref(20)
-const phaseFilter = ref<string>()
-const typeFilter = ref<string>()
-const categoryFilter = ref<string>()
-const sortFilter = ref<string>()
-const keyword = ref('')
-const categoryMap = ref<Record<string, string>>({})
+// 筛选与分页挂到 URL：刷新不丢、链接可分享、前进后退可用（对齐官方列表页）
+// 逐键挂到 URL（对齐官方列表页）。useRouteQuery 内部对同一 tick 的多次写入做了
+// 队列合并，「清空筛选」一次重置多项也只产生一次导航
+const filters = reactive({
+  page: useRouteQuery<number>('page', 1, { transform: Number }),
+  size: useRouteQuery<number>('size', 20, { transform: Number }),
+  keyword: useRouteQuery<string>('keyword', ''),
+  phase: useRouteQuery<string | undefined>('phase'),
+  type: useRouteQuery<string | undefined>('type'),
+  category: useRouteQuery<string | undefined>('category'),
+  sort: useRouteQuery<string | undefined>('sort'),
+  owner: useRouteQuery<string | undefined>('owner'),
+  // 回收站作为一种列表视图，同样挂 URL——刷新与分享链接都能停在回收站
+  deleted: useRouteQuery<string | undefined>('deleted'),
+})
+/**
+ * 回收站视图：列表只显示已删除的帖子，操作集也随之切换。
+ *
+ * <b>必须定义在下方 {@code watch(..., immediate)} 触发 {@code fetchPosts} 之前</b>——
+ * fetchPosts 会读取 {@code inRecycleBin.value}，若它尚未初始化（暂时性死区），首次自动
+ * 加载会抛 ReferenceError 并被静默吞掉，表现就是「首屏空列表、手动刷新才有数据」。
+ */
+const inRecycleBin = computed({
+  get: () => filters.deleted === 'true',
+  set: (value: boolean) => {
+    filters.deleted = value ? 'true' : undefined
+  },
+})
+const categories = ref<CategoryVo[]>([])
 const selected = ref<string[]>([])
 
 // 快捷设置弹窗
@@ -66,20 +91,19 @@ const settingModalVisible = ref(false)
 const settingPost = ref<BbsPostVo | null>(null)
 const settingForm = ref(defaultPostForm())
 const settingSaving = ref(false)
+/** 审核记录弹窗的目标帖名；审核留痕从编辑器挪到列表行下拉后的唯一入口 */
+const moderationName = ref('')
+/** 评论管理弹窗的目标帖名；评论列（有未审核时上色）点击打开 */
+const commentsPost = ref('')
 
 const phaseItems = computed(() => [
   { label: '全部', value: undefined },
-  ...Object.entries(PHASE_LABELS).map(([value, label]) => ({ label, value })),
+  ...Object.entries(BBS_PHASE_LABELS).map(([value, label]) => ({ label, value })),
 ])
 
 const typeItems = computed(() => [
   { label: '全部', value: undefined },
-  ...Object.entries(TYPE_LABELS).map(([value, label]) => ({ label, value })),
-])
-
-const categoryItems = computed(() => [
-  { label: '全部', value: undefined },
-  ...Object.entries(categoryMap.value).map(([value, label]) => ({ label, value })),
+  ...Object.entries(BBS_TYPE_LABELS).map(([value, label]) => ({ label, value })),
 ])
 
 // 排序白名单键与后端 CONSOLE_SORTS 一致
@@ -88,19 +112,26 @@ const sortItems = [
   { label: '创建时间 升序', value: 'creationTimestamp,asc' },
   { label: '发布时间 降序', value: 'publishTime,desc' },
   { label: '发布时间 升序', value: 'publishTime,asc' },
+  { label: '最后活跃 降序', value: 'lastActivityTime,desc' },
+  { label: '最后活跃 升序', value: 'lastActivityTime,asc' },
+  { label: '最后编辑 降序', value: 'lastEditTime,desc' },
+  { label: '最后编辑 升序', value: 'lastEditTime,asc' },
+  { label: '评论数 降序', value: 'commentsCount,desc' },
+  { label: '评论数 升序', value: 'commentsCount,asc' },
 ]
 
-const categoryOptions = computed(() =>
-  Object.entries(categoryMap.value).map(([value, label]) => ({ label, value }))
-)
+// 作者筛选需 system:users:view 权限（对齐官方对 UserFilterDropdown 的权限包裹）；
+// 候选由组件自身带搜索地拉取
+const canViewUsers = utils.permission.has(['system:users:view'])
 
 const hasFilters = computed(
   () =>
-    !!phaseFilter.value ||
-    !!typeFilter.value ||
-    !!categoryFilter.value ||
-    !!sortFilter.value ||
-    !!keyword.value
+    !!filters.phase ||
+    !!filters.type ||
+    !!filters.category ||
+    !!filters.sort ||
+    !!filters.owner ||
+    !!filters.keyword
 )
 
 const isAllSelected = computed(
@@ -109,57 +140,112 @@ const isAllSelected = computed(
 
 // 帖子管理操作（审核/置顶/锁定/已解决/删除）对版主开放；分类管理仍需完整管理权限
 const canModerate = utils.permission.has(['plugin:bbs:moderate'])
+const canManage = utils.permission.has(['plugin:bbs:manage'])
+
+/**
+ * 无可见板块：分类列表也按版主管辖过滤，取不到任何分类说明
+ * 要么站点还没建分类（管理员场景），要么这个版主还没被指派板块。
+ * 帖子必须归属分类，所以此时列表必然为空——空状态要说清原因，
+ * 否则分区版主进来只看到「暂无帖子」，完全不知道该找谁。
+ *
+ * 必须等加载成功才判定：接口失败时 categories 同样为空，
+ * 直接判会把一次网络抖动说成「你没有权限」。
+ */
+const categoriesLoaded = ref(false)
+const noCategories = computed(() => categoriesLoaded.value && categories.value.length === 0)
 
 async function fetchCategories() {
   try {
     const { data } = await consoleApi.listCategories()
-    const map: Record<string, string> = {}
-    ;(data || []).forEach((c) => {
-      // 树序平铺；子分类 label 带父级前缀便于辨识
-      map[c.name] = c.parent ? `${c.parent.displayName} / ${c.displayName}` : c.displayName
-    })
-    categoryMap.value = map
-  } catch {
-    /* 忽略：筛选项加载失败不阻塞列表 */
+    categories.value = data || []
+    categoriesLoaded.value = true
+  } catch (error) {
+    // 筛选项加载失败不阻塞列表；但把错误打到控制台——空 catch 会把同步异常（如引用
+    // 未初始化变量）一并吞掉且无任何痕迹，历史上曾因此掩盖过一个首屏空列表 bug。
+    console.error('[bbs] 分类筛选加载失败', error)
   }
 }
 
+const keywordDebounced = refDebounced(
+  computed(() => filters.keyword),
+  300
+)
+let fetchSeq = 0
+
 async function fetchPosts() {
+  const seq = ++fetchSeq
   loading.value = true
   selected.value = []
   try {
     const { data } = await consoleApi.listPosts({
-      page: page.value,
-      size: size.value,
-      keyword: keyword.value.trim() || undefined,
-      categoryName: categoryFilter.value,
-      type: typeFilter.value,
-      phase: phaseFilter.value,
-      sort: sortFilter.value,
+      page: filters.page,
+      size: filters.size,
+      keyword: (keywordDebounced.value || '').trim() || undefined,
+      categoryName: filters.category,
+      type: filters.type,
+      phase: filters.phase,
+      sort: filters.sort,
+      owner: filters.owner,
+      deleted: inRecycleBin.value || undefined,
     })
+    if (seq !== fetchSeq) {
+      return
+    }
     posts.value = data.items || []
     total.value = data.total || 0
-  } catch {
-    /* 请求错误由全局拦截器提示 */
+  } catch (error) {
+    // HTTP 错误由全局拦截器提示；这里再把错误打到控制台——空 catch 会把拼参数时的
+    // 同步异常（如引用未初始化变量）一并吞掉，历史上曾因此掩盖过一个首屏空列表 bug。
+    console.error('[bbs] 帖子列表加载失败', error)
   } finally {
-    loading.value = false
+    if (seq === fetchSeq) {
+      loading.value = false
+    }
   }
 }
 
-function applyFilter() {
-  page.value = 1
-  fetchPosts()
-}
-
 function resetFilters() {
-  phaseFilter.value = undefined
-  typeFilter.value = undefined
-  categoryFilter.value = undefined
-  sortFilter.value = undefined
-  keyword.value = ''
+  filters.phase = undefined
+  filters.type = undefined
+  filters.category = undefined
+  filters.sort = undefined
+  filters.owner = undefined
+  filters.keyword = ''
 }
 
-watch([phaseFilter, typeFilter, categoryFilter, sortFilter, keyword], applyFilter)
+// 筛选条件变化时回到第 1 页；随后的统一 watch 只发一次请求
+watch(
+  () => [
+    keywordDebounced.value,
+    filters.phase,
+    filters.type,
+    filters.category,
+    filters.sort,
+    filters.owner,
+    filters.deleted,
+  ],
+  () => {
+    filters.page = 1
+  }
+)
+
+// 唯一的请求入口：分页与筛选都走这里。VPagination 因此不再单独绑 @change，
+// 否则翻页会触发两次请求。keyword 听 debounce 后的值，避免每个字符打一次。
+watch(
+  () => [
+    filters.page,
+    filters.size,
+    keywordDebounced.value,
+    filters.phase,
+    filters.type,
+    filters.category,
+    filters.sort,
+    filters.owner,
+    filters.deleted,
+  ],
+  fetchPosts,
+  { immediate: true }
+)
 
 function toggleSelect(name: string) {
   selected.value = selected.value.includes(name)
@@ -171,35 +257,45 @@ function toggleSelectAll() {
   selected.value = isAllSelected.value ? [] : posts.value.map((p) => p.name)
 }
 
-async function doAction(
-  name: string,
-  op:
-    | 'publish'
-    | 'unpublish'
-    | 'approve'
-    | 'pin'
-    | 'unpin'
-    | 'lock'
-    | 'unlock'
-    | 'solve'
-    | 'unsolve',
-  okText: string
-) {
+/** 行内状态切换操作表（操作名 → 端点）；新增操作只需补表。 */
+const POST_ACTIONS = {
+  publish: consoleApi.publishPost,
+  unpublish: consoleApi.unpublishPost,
+  approve: consoleApi.approvePost,
+  pin: consoleApi.pinPost,
+  unpin: consoleApi.unpinPost,
+  lock: consoleApi.lockPost,
+  unlock: consoleApi.unlockPost,
+  solve: consoleApi.solvePost,
+  unsolve: consoleApi.unsolvePost,
+} satisfies Record<string, (name: string) => Promise<unknown>>
+
+async function doAction(name: string, op: keyof typeof POST_ACTIONS, okText: string) {
   try {
-    if (op === 'publish') await consoleApi.publishPost(name)
-    else if (op === 'unpublish') await consoleApi.unpublishPost(name)
-    else if (op === 'approve') await consoleApi.approvePost(name)
-    else if (op === 'pin') await consoleApi.pinPost(name)
-    else if (op === 'unpin') await consoleApi.unpinPost(name)
-    else if (op === 'lock') await consoleApi.lockPost(name)
-    else if (op === 'unlock') await consoleApi.unlockPost(name)
-    else if (op === 'solve') await consoleApi.solvePost(name)
-    else await consoleApi.unsolvePost(name)
+    await POST_ACTIONS[op](name)
     Toast.success(okText)
     await fetchPosts()
   } catch {
     /* 请求错误由全局拦截器提示 */
   }
+}
+
+/**
+ * 列表内直接切换锁定（对齐官方「可见性」列的一键切换）。
+ * 锁定是重操作——禁回复 + 作者不能再编辑或删除，故加二次确认；
+ * 解锁是恢复性操作，不拦。
+ */
+function toggleLock(post: BbsPostVo) {
+  if (post.locked) {
+    doAction(post.name, 'unlock', '已解锁')
+    return
+  }
+  Dialog.warning({
+    title: '锁定帖子',
+    description: `将锁定「${post.title}」：禁止回复，作者也不能再编辑或删除。`,
+    confirmType: 'danger',
+    onConfirm: () => doAction(post.name, 'lock', '已锁定'),
+  })
 }
 
 /** 批量操作统一反馈：allSettled 统计成功/失败，部分失败也如实提示。 */
@@ -212,14 +308,134 @@ function reportBatch(results: PromiseSettledResult<unknown>[], okText: string) {
   }
 }
 
-async function batchAction(op: 'publish' | 'unpublish', okText: string) {
-  const results = await Promise.allSettled(
-    selected.value.map((name) =>
-      op === 'publish' ? consoleApi.publishPost(name) : consoleApi.unpublishPost(name)
-    )
-  )
-  reportBatch(results, okText)
-  await fetchPosts()
+/**
+ * 分片串行执行（对齐官方 chunk(names, 5)）：选中上百条时一次性并发会打爆服务端，
+ * 每片 5 个、片间串行。
+ */
+async function runInChunks<T>(
+  items: T[],
+  task: (item: T) => Promise<unknown>,
+  size = 5
+): Promise<PromiseSettledResult<unknown>[]> {
+  const results: PromiseSettledResult<unknown>[] = []
+  for (let i = 0; i < items.length; i += size) {
+    results.push(...(await Promise.allSettled(items.slice(i, i + size).map(task))))
+  }
+  return results
+}
+
+/**
+ * 批量执行入口：统一「二次确认 → 分片串行 → 汇总反馈 → 刷新」四步。
+ * 对齐 Discourse——每个批量操作都先确认，因为影响面是成批的。
+ */
+function runBatch(options: {
+  title: string
+  description: string
+  okText: string
+  danger?: boolean
+  names?: string[]
+  task: (name: string) => Promise<unknown>
+}) {
+  const names = options.names ?? selected.value
+  if (names.length === 0) {
+    return
+  }
+  const confirm = options.danger ? Dialog.warning : Dialog.info
+  confirm({
+    title: options.title,
+    description: options.description,
+    ...(options.danger ? { confirmType: 'danger' as const } : {}),
+    onConfirm: async () => {
+      const results = await runInChunks(names, options.task)
+      reportBatch(results, options.okText)
+      await fetchPosts()
+    },
+  })
+}
+
+/** 选中集合的状态摘要：决定哪些批量操作有意义、该不该出现（对齐 Discourse 的 visible 条件） */
+const selectedPosts = computed(() => posts.value.filter((p) => selected.value.includes(p.name)))
+const isPendingReview = (post: BbsPostVo) =>
+  post.phase === 'PENDING' || post.draftPhase === 'PENDING'
+const selectionHas = computed(() => {
+  const list = selectedPosts.value
+  return {
+    pending: list.some(isPendingReview),
+    draft: list.some((p) => p.phase === 'DRAFT' || p.phase === 'REJECTED'),
+    published: list.some((p) => p.phase === 'PUBLISHED'),
+    locked: list.some((p) => p.locked),
+    unlocked: list.some((p) => !p.locked),
+    pinned: list.some((p) => p.pinned),
+    unpinned: list.some((p) => !p.pinned),
+  }
+})
+
+const batchCount = computed(() => selected.value.length)
+
+function batchApprove() {
+  const names = selectedPosts.value.filter(isPendingReview).map((p) => p.name)
+  runBatch({
+    title: '批量通过审核',
+    description: `将通过选中的 ${names.length} 篇待审核内容；首次投稿会发布，已发布帖的修改稿会替换当前前台版本。`,
+    okText: '已通过并发布',
+    names,
+    task: (name) => consoleApi.approvePost(name),
+  })
+}
+
+function batchPublish() {
+  const names = selectedPosts.value
+    .filter((p) => p.phase === 'DRAFT' || p.phase === 'REJECTED')
+    .map((p) => p.name)
+  runBatch({
+    title: '批量发布',
+    description: `将发布选中的 ${names.length} 篇未发布 / 已驳回帖子，发布后前台立即可见。`,
+    okText: '已发布',
+    names,
+    task: (name) => consoleApi.publishPost(name),
+  })
+}
+
+function batchUnpublish() {
+  const names = selectedPosts.value.filter((p) => p.phase === 'PUBLISHED').map((p) => p.name)
+  runBatch({
+    title: '批量取消发布',
+    description: `将取消发布选中的 ${names.length} 篇帖子，前台将不再展示。`,
+    okText: '已取消发布',
+    danger: true,
+    names,
+    task: (name) => consoleApi.unpublishPost(name),
+  })
+}
+
+function batchLock(locked: boolean) {
+  runBatch({
+    title: locked ? '批量锁定' : '批量解锁',
+    description: locked
+      ? `将锁定选中的 ${batchCount.value} 篇帖子：禁止评论，作者也不能再编辑或删除。`
+      : `将解锁选中的 ${batchCount.value} 篇帖子，恢复评论与编辑。`,
+    okText: locked ? '已锁定' : '已解锁',
+    danger: locked,
+    task: (name) => (locked ? consoleApi.lockPost(name) : consoleApi.unlockPost(name)),
+  })
+}
+
+function batchPin(pinned: boolean) {
+  runBatch({
+    title: pinned ? '批量置顶' : '批量取消置顶',
+    description: `将对选中的 ${batchCount.value} 篇帖子${pinned ? '置顶' : '取消置顶'}。`,
+    okText: pinned ? '已置顶' : '已取消置顶',
+    task: (name) => (pinned ? consoleApi.pinPost(name) : consoleApi.unpinPost(name)),
+  })
+}
+
+function batchRestore() {
+  runBatch({
+    title: '批量恢复',
+    description: `将把选中的 ${batchCount.value} 篇帖子移出回收站。`,
+    okText: '已恢复',
+    task: (name) => consoleApi.restorePost(name),
+  })
 }
 
 // 驳回弹窗（可附驳回原因，展示给作者）
@@ -234,11 +450,25 @@ function openReject(post: BbsPostVo) {
   rejectVisible.value = true
 }
 
+/** 批量驳回：rejectingPost 置空表示批量模式，选中的帖子共用同一条驳回原因 */
+function openBatchReject() {
+  rejectingPost.value = null
+  rejectReason.value = ''
+  rejectVisible.value = true
+}
+
 async function confirmReject() {
+  const reason = rejectReason.value.trim()
   rejectSaving.value = true
   try {
-    await consoleApi.rejectPost(rejectingPost.value!.name, rejectReason.value.trim())
-    Toast.success('已驳回')
+    if (rejectingPost.value) {
+      await consoleApi.rejectPost(rejectingPost.value.name, reason)
+      Toast.success('已驳回')
+    } else {
+      const names = selectedPosts.value.filter(isPendingReview).map((p) => p.name)
+      const results = await runInChunks(names, (name) => consoleApi.rejectPost(name, reason))
+      reportBatch(results, '已驳回')
+    }
     rejectVisible.value = false
     await fetchPosts()
   } finally {
@@ -254,12 +484,21 @@ const batchSaving = ref(false)
 async function batchSetCategory() {
   batchSaving.value = true
   try {
-    const results = await Promise.allSettled(
-      selected.value.map((name) =>
-        postCrudApi.patch(name, [
-          { op: 'add', path: '/spec/categoryName', value: batchCategoryName.value || null },
-        ])
-      )
+    if (!batchCategoryName.value) {
+      Toast.warning('请选择分类')
+      return
+    }
+    const results = await runInChunks(selectedPosts.value, (post) =>
+      consoleApi.updatePost(post.name, {
+        title: post.title,
+        slug: post.slug,
+        type: post.type,
+        categoryName: batchCategoryName.value,
+        autoExcerpt: post.autoExcerpt,
+        excerpt: post.excerpt,
+        pinned: post.pinned,
+        pinPriority: post.pinPriority,
+      })
     )
     reportBatch(results, '已设置分类')
     batchCategoryVisible.value = false
@@ -270,29 +509,41 @@ async function batchSetCategory() {
 }
 
 function batchDelete() {
-  Dialog.warning({
-    title: '批量删除',
-    description: `确定删除选中的 ${selected.value.length} 篇帖子吗？该操作不可恢复。`,
-    confirmType: 'danger',
-    onConfirm: async () => {
-      const results = await Promise.allSettled(
-        selected.value.map((name) => consoleApi.deletePost(name))
-      )
-      reportBatch(results, '已删除')
-      await fetchPosts()
-    },
+  if (inRecycleBin.value) {
+    runBatch({
+      title: '彻底删除',
+      description: `将永久删除选中的 ${batchCount.value} 篇帖子，该操作不可恢复。`,
+      okText: '已彻底删除',
+      danger: true,
+      task: (name) => consoleApi.deletePostPermanently(name),
+    })
+    return
+  }
+  runBatch({
+    title: '移入回收站',
+    description: `将把选中的 ${batchCount.value} 篇帖子移入回收站，前台立即不可见，之后可恢复。`,
+    okText: '已移入回收站',
+    danger: true,
+    task: (name) => consoleApi.deletePost(name),
   })
 }
 
 function onDelete(post: BbsPostVo) {
+  const permanent = inRecycleBin.value
   Dialog.warning({
-    title: '删除帖子',
-    description: `确定删除「${post.title}」吗？该操作不可恢复。`,
+    title: permanent ? '彻底删除' : '移入回收站',
+    description: permanent
+      ? `将永久删除「${post.title}」，该操作不可恢复。`
+      : `将把「${post.title}」移入回收站，前台立即不可见，之后可恢复。`,
     confirmType: 'danger',
     onConfirm: async () => {
       try {
-        await consoleApi.deletePost(post.name)
-        Toast.success('已删除')
+        if (permanent) {
+          await consoleApi.deletePostPermanently(post.name)
+        } else {
+          await consoleApi.deletePost(post.name)
+        }
+        Toast.success(permanent ? '已彻底删除' : '已移入回收站')
         await fetchPosts()
       } catch {
         /* 请求错误由全局拦截器提示 */
@@ -301,45 +552,47 @@ function onDelete(post: BbsPostVo) {
   })
 }
 
+/** 单条恢复（回收站视图） */
+async function onRestore(post: BbsPostVo) {
+  try {
+    await consoleApi.restorePost(post.name)
+    Toast.success('已恢复')
+    await fetchPosts()
+  } catch {
+    /* 请求错误由全局拦截器提示 */
+  }
+}
+
 function openSetting(post: BbsPostVo) {
   settingPost.value = post
-  settingForm.value = {
-    title: post.title || '',
-    slug: post.slug || '',
-    type: post.type || 'POST',
-    categoryName: post.category?.name || '',
-    autoExcerpt: !post.excerpt,
-    excerpt: post.excerpt || '',
-    content: '',
-    allowComment: post.allowComment !== false,
-    pinned: !!post.pinned,
-    pinPriority: post.pinPriority || 0,
-  }
+  settingForm.value = postFormFrom(post)
   settingModalVisible.value = true
 }
 
 async function saveSetting() {
   const f = settingForm.value
+  if (!f.title.trim()) {
+    Toast.warning('标题不能为空')
+    return
+  }
   if (!f.slug.trim()) {
     Toast.warning('别名不能为空')
     return
   }
   settingSaving.value = true
   try {
-    await postCrudApi.patch(settingPost.value!.name, [
-      { op: 'add', path: '/spec/slug', value: f.slug.trim() },
-      { op: 'add', path: '/spec/type', value: f.type },
-      { op: 'add', path: '/spec/categoryName', value: f.categoryName || null },
-      { op: 'add', path: '/spec/excerpt', value: f.autoExcerpt ? '' : f.excerpt },
-      { op: 'add', path: '/spec/allowComment', value: f.allowComment },
-      { op: 'add', path: '/spec/pinned', value: f.pinned },
-      { op: 'add', path: '/spec/pinPriority', value: f.pinPriority },
-      // 改出问答类型时清掉已解决残留，避免改回问答后凭空「已解决」
-      ...(f.type !== 'QUESTION'
-        ? [{ op: 'add', path: '/spec/solved', value: false } as const]
-        : []),
-    ])
-    Toast.success('已保存')
+    // 走 PUT：正文不传，服务层保留原内容，并跑分类存在 / slug 唯一 / 改出问答清 solved
+    await consoleApi.updatePost(settingPost.value!.name, {
+      title: f.title.trim(),
+      slug: f.slug.trim(),
+      type: f.type,
+      categoryName: f.categoryName,
+      autoExcerpt: f.autoExcerpt,
+      excerpt: f.excerpt,
+      pinned: f.pinned,
+      pinPriority: f.pinPriority,
+    })
+    Toast.success('保存成功')
     settingModalVisible.value = false
     await fetchPosts()
   } catch {
@@ -353,26 +606,30 @@ function toEditor(name?: string) {
   router.push({ name: 'BbsPostEditor', query: name ? { name } : {} })
 }
 
-function formatTime(value?: string) {
-  return value ? utils.date.format(value) : ''
-}
-
-function timeAgo(value?: string) {
-  return value ? utils.date.timeAgo(value) : '—'
-}
-
 onMounted(() => {
   fetchCategories()
-  fetchPosts()
 })
 </script>
 
 <template>
-  <VPageHeader title="BBS 社区">
+  <!-- 回收站是同页的一种模式：标题 / 图标 / 按钮文案随之切换，
+       让页头反映当前上下文（对齐官方回收站页的做法） -->
+  <VPageHeader :title="inRecycleBin ? '帖子回收站' : '帖子'">
     <template #icon>
-      <RiMegaphoneLine class="header-icon" />
+      <RiDeleteBinLine v-if="inRecycleBin" class="bbs-header-icon" />
+      <RiMegaphoneLine v-else class="bbs-header-icon" />
     </template>
     <template #actions>
+      <!-- 「返回」是退出动作，用默认色，与分类管理页的返回按钮保持一致（文案同样统一为
+           「返回」——分类页本身也是个列表，写「返回列表」反而有歧义）；
+           强调色留给「写帖子」这类主动作 -->
+      <VButton
+        v-permission="['plugin:bbs:moderate']"
+        size="sm"
+        @click="inRecycleBin = !inRecycleBin"
+      >
+        {{ inRecycleBin ? '返回' : '回收站' }}
+      </VButton>
       <VButton v-permission="['plugin:bbs:manage']" size="sm" :route="{ name: 'BbsCategories' }">
         分类管理
       </VButton>
@@ -383,7 +640,7 @@ onMounted(() => {
     </template>
   </VPageHeader>
 
-  <div class="page-body">
+  <div class="bbs-page-body">
     <VCard :body-class="['!p-0']">
       <template #header>
         <div class="list-toolbar">
@@ -397,24 +654,74 @@ onMounted(() => {
             />
           </div>
           <div class="list-toolbar__main">
-            <SearchInput v-if="!selected.length" v-model="keyword" placeholder="搜索标题" />
+            <SearchInput v-if="!selected.length" v-model="filters.keyword" placeholder="搜索标题" />
+            <!--
+              批量操作按 Discourse 口径：高频的直接放外面，其余收进「更多」；
+              每项按选中集合的实际状态显示——选中项里没有已锁定的帖子，就不出现「解锁」
+            -->
             <VSpace v-else>
-              <VButton @click="batchAction('publish', '已发布')">发布</VButton>
-              <VButton @click="batchAction('unpublish', '已转为草稿')">转为草稿</VButton>
-              <VButton @click="batchCategoryVisible = true">设置分类</VButton>
-              <VButton type="danger" @click="batchDelete">删除</VButton>
+              <template v-if="inRecycleBin">
+                <VButton @click="batchRestore">恢复</VButton>
+                <!-- 彻底删除不可逆，仅完整管理角色可见（版主只能恢复） -->
+                <VButton
+                  v-permission="['plugin:bbs:manage']"
+                  type="danger"
+                  @click="batchDelete"
+                >
+                  彻底删除
+                </VButton>
+              </template>
+              <template v-else>
+                <VButton v-if="selectionHas.pending" type="secondary" @click="batchApprove">
+                  通过审核
+                </VButton>
+                <VButton v-if="selectionHas.pending" type="danger" @click="openBatchReject">
+                  驳回
+                </VButton>
+                <VButton type="danger" @click="batchDelete">删除</VButton>
+                <VDropdown>
+                  <VButton>更多</VButton>
+                  <template #popper>
+                    <VDropdownItem v-if="selectionHas.draft" @click="batchPublish">
+                      发布
+                    </VDropdownItem>
+                    <VDropdownItem v-if="selectionHas.published" @click="batchUnpublish">
+                      取消发布
+                    </VDropdownItem>
+                    <VDropdownItem @click="batchCategoryVisible = true">设置分类</VDropdownItem>
+                    <VDropdownDivider />
+                    <VDropdownItem v-if="selectionHas.unlocked" @click="batchLock(true)">
+                      锁定
+                    </VDropdownItem>
+                    <VDropdownItem v-if="selectionHas.locked" @click="batchLock(false)">
+                      解锁
+                    </VDropdownItem>
+                    <VDropdownItem v-if="selectionHas.unpinned" @click="batchPin(true)">
+                      置顶
+                    </VDropdownItem>
+                    <VDropdownItem v-if="selectionHas.pinned" @click="batchPin(false)">
+                      取消置顶
+                    </VDropdownItem>
+                  </template>
+                </VDropdown>
+              </template>
             </VSpace>
           </div>
           <VSpace spacing="lg" class="list-toolbar__filters">
             <FilterCleanButton v-if="hasFilters" @click="resetFilters" />
-            <FilterDropdown v-model="phaseFilter" label="状态" :items="phaseItems" />
-            <FilterDropdown v-model="typeFilter" label="类型" :items="typeItems" />
-            <FilterDropdown v-model="categoryFilter" label="分类" :items="categoryItems" />
-            <FilterDropdown v-model="sortFilter" label="排序" :items="sortItems" />
-            <div v-tooltip="'刷新'" class="refresh-btn" @click="fetchPosts">
+            <FilterDropdown v-model="filters.phase" label="状态" :items="phaseItems" />
+            <FilterDropdown v-model="filters.type" label="类型" :items="typeItems" />
+            <CategoryFilterDropdown
+              v-model="filters.category"
+              label="分类"
+              :categories="categories"
+            />
+            <UserFilterDropdown v-if="canViewUsers" v-model="filters.owner" label="作者" />
+            <FilterDropdown v-model="filters.sort" label="排序" :items="sortItems" />
+            <div v-tooltip="'刷新'" class="bbs-refresh-btn" @click="fetchPosts">
               <IconRefreshLine
-                class="refresh-btn__icon"
-                :class="{ 'refresh-btn__icon--spin': loading }"
+                class="bbs-refresh-btn__icon"
+                :class="{ 'bbs-refresh-btn__icon--spin': loading }"
               />
             </div>
           </VSpace>
@@ -423,11 +730,49 @@ onMounted(() => {
 
       <VLoading v-if="loading" />
       <Transition v-else-if="posts.length === 0" appear name="fade">
-        <VEmpty title="暂无帖子" message="当前筛选下没有内容，可以刷新或发布一篇新帖子 / 公告">
+        <!-- 三种空态按「用户该做什么」分：没板块可管 → 找管理员或去建分类；
+             回收站空 → 说明回收站语义；其余 → 常规无内容 -->
+        <VEmpty
+          v-if="noCategories && !inRecycleBin"
+          :title="canManage ? '还没有分类' : '暂无可管理的板块'"
+          :message="
+            canManage
+              ? '帖子必须归属分类，先创建一个分类再发帖'
+              : '你的账号还没有被指派板块。请联系管理员在分类设置中，把你的角色加入「本板块版主角色」'
+          "
+        >
+          <template #actions>
+            <VSpace>
+              <VButton @click="fetchCategories">刷新</VButton>
+              <VButton
+                v-permission="['plugin:bbs:manage']"
+                type="secondary"
+                :route="{ name: 'BbsCategories' }"
+              >
+                <template #icon><IconAddCircle /></template>
+                管理分类
+              </VButton>
+            </VSpace>
+          </template>
+        </VEmpty>
+        <VEmpty
+          v-else
+          :title="inRecycleBin ? '回收站是空的' : '暂无帖子'"
+          :message="
+            inRecycleBin
+              ? '被删除的帖子会先进入这里，可以恢复或彻底删除'
+              : '当前筛选下没有内容，可以刷新或发布一篇新帖子 / 公告'
+          "
+        >
           <template #actions>
             <VSpace>
               <VButton @click="fetchPosts">刷新</VButton>
-              <VButton v-permission="['plugin:bbs:moderate']" type="secondary" @click="toEditor()">
+              <VButton
+                v-if="!inRecycleBin"
+                v-permission="['plugin:bbs:moderate']"
+                type="secondary"
+                @click="toEditor()"
+              >
                 <template #icon><IconAddCircle /></template>
                 写帖子
               </VButton>
@@ -452,79 +797,28 @@ onMounted(() => {
               />
             </template>
             <template #start>
-              <VEntityField
-                :title="post.title"
-                max-width="30rem"
-                :route="canModerate ? { name: 'BbsPostEditor', query: { name: post.name } } : undefined"
-              >
-                <template #extra>
-                  <a
-                    v-if="post.phase === 'PUBLISHED'"
-                    target="_blank"
-                    :href="post.permalink"
-                    class="entity-permalink"
-                    @click.stop
-                  >
-                    <IconExternalLinkLine class="entity-permalink__icon" />
-                  </a>
-                </template>
-                <template #description>
-                  <div class="entity-meta">
-                    <!-- 固定槽位：分类（子分类带父级前缀；无分类显示占位），保证各行左缘对齐 -->
-                    <span v-if="post.category" class="entity-category">
-                      <span
-                        class="entity-category__dot"
-                        :style="{ background: post.category.color || '#9ca3af' }"
-                      ></span>
-                      {{
-                        post.category.parent
-                          ? `${post.category.parent.displayName} / ${post.category.displayName}`
-                          : post.category.displayName
-                      }}
-                    </span>
-                    <span v-else class="entity-category entity-category--none">
-                      <span class="entity-category__dot"></span>
-                      未分类
-                    </span>
-                    <!-- 条件徽标：跟在固定槽位之后 -->
-                    <span
-                      v-if="post.type === 'ANNOUNCEMENT'"
-                      class="bbs-badge bbs-badge--announcement"
-                    >
-                      公告
-                    </span>
-                    <span
-                      v-if="post.type === 'QUESTION' && !post.solved"
-                      class="bbs-badge bbs-badge--question"
-                    >
-                      问答
-                    </span>
-                    <span
-                      v-if="post.type === 'QUESTION' && post.solved"
-                      class="bbs-badge bbs-badge--solved"
-                    >
-                      已解决
-                    </span>
-                    <span v-if="post.pinned" class="bbs-badge bbs-badge--pinned">置顶</span>
-                    <span v-if="post.locked" class="bbs-badge bbs-badge--locked">锁定</span>
-                    <span
-                      v-if="post.allowComment === false"
-                      class="bbs-badge bbs-badge--locked"
-                    >
-                      评论关闭
-                    </span>
-                    <span
-                      v-if="post.lastEditTime"
-                      v-tooltip="formatTime(post.lastEditTime)"
-                      class="entity-meta__faint"
-                    >
-                      已编辑
-                    </span>
-                  </div>
-                </template>
-              </VEntityField>
+              <PostEntityStart
+                :post="post"
+                :title-route="
+                  canModerate && !inRecycleBin
+                    ? { name: 'BbsPostEditor', query: { name: post.name } }
+                    : undefined
+                "
+              />
             </template>
             <template #end>
+              <!-- 官方口径总数 + 待审核上色；可点（回收站与无审核权限时只读） -->
+              <PostCommentsField
+                :count="post.totalCommentCount"
+                :pending="post.pendingCommentCount"
+                :clickable="canModerate && !inRecycleBin"
+                @open="commentsPost = post.name"
+              />
+              <PostLockField
+                :post="post"
+                :readonly="!canModerate || inRecycleBin"
+                @toggle-lock="toggleLock(post)"
+              />
               <VEntityField width="2rem">
                 <template #description>
                   <VAvatar
@@ -537,41 +831,12 @@ onMounted(() => {
                   />
                 </template>
               </VEntityField>
-              <VEntityField width="3.5rem">
-                <template #description>
-                  <span v-tooltip="'评论数'" class="entity-comments">
-                    <RiChat1Line class="entity-comments__icon" />
-                    {{ post.commentCount ?? 0 }}
-                  </span>
-                </template>
-              </VEntityField>
-              <VEntityField width="5rem">
-                <template #description>
-                  <VStatusDot
-                    v-if="post.phase === 'PUBLISHED'"
-                    state="success"
-                    text="已发布"
-                  />
-                  <VStatusDot
-                    v-else-if="post.phase === 'PENDING'"
-                    state="warning"
-                    text="待审核"
-                    animate
-                  />
-                  <VStatusDot
-                    v-else-if="post.phase === 'REJECTED'"
-                    v-tooltip="post.rejectReason ? `驳回原因：${post.rejectReason}` : ''"
-                    state="error"
-                    text="已驳回"
-                  />
-                  <VStatusDot v-else state="default" text="草稿" />
-                </template>
-              </VEntityField>
+              <PostStatusEnd :post="post" />
               <VEntityField width="7rem">
                 <template #description>
                   <span
                     v-tooltip="formatTime(post.publishTime || post.creationTimestamp)"
-                    class="entity-meta"
+                    class="bbs-entity-time"
                   >
                     {{ timeAgo(post.publishTime || post.creationTimestamp) }}
                   </span>
@@ -579,22 +844,47 @@ onMounted(() => {
               </VEntityField>
             </template>
             <template v-if="canModerate" #dropdownItems>
+              <!-- 回收站里只保留恢复 / 彻底删除，其余操作对已删除的帖子没有意义 -->
+              <template v-if="inRecycleBin">
+                <VDropdownItem @click="onRestore(post)">恢复</VDropdownItem>
+                <!-- 彻底删除不可逆，仅完整管理角色可见（分隔线随之隐藏，免留孤线） -->
+                <VDropdownDivider v-permission="['plugin:bbs:manage']" />
+                <VDropdownItem
+                  v-permission="['plugin:bbs:manage']"
+                  type="danger"
+                  @click="onDelete(post)"
+                >
+                  彻底删除
+                </VDropdownItem>
+              </template>
+              <template v-else>
               <VDropdownItem @click="toEditor(post.name)">编辑</VDropdownItem>
               <VDropdownItem @click="openSetting(post)">设置</VDropdownItem>
+              <VDropdownItem @click="moderationName = post.name">审核记录</VDropdownItem>
               <VDropdownDivider />
-              <template v-if="post.phase === 'PENDING'">
+              <template v-if="isPendingReview(post)">
                 <VDropdownItem @click="doAction(post.name, 'approve', '已通过并发布')">
-                  通过
+                  通过审核
                 </VDropdownItem>
                 <VDropdownItem type="danger" @click="openReject(post)">驳回</VDropdownItem>
               </template>
+              <template v-else-if="post.phase === 'PUBLISHED'">
+                <!-- 与未发布帖的「发布」同词：动作语义一致（把当前内容推为前台版本） -->
+                <VDropdownItem
+                  v-if="post.hasDraft"
+                  @click="doAction(post.name, 'publish', '已发布')"
+                >
+                  发布
+                </VDropdownItem>
+                <VDropdownItem @click="doAction(post.name, 'unpublish', '已取消发布')">
+                  取消发布
+                </VDropdownItem>
+              </template>
+              <!-- 无分类的未发布帖（未发布阶段允许暂缺分类）：发布前先进设置补分类 -->
               <VDropdownItem
-                v-else-if="post.phase === 'PUBLISHED'"
-                @click="doAction(post.name, 'unpublish', '已转为草稿')"
+                v-else
+                @click="post.category ? doAction(post.name, 'publish', '已发布') : openSetting(post)"
               >
-                撤销发布
-              </VDropdownItem>
-              <VDropdownItem v-else @click="doAction(post.name, 'publish', '已发布')">
                 发布
               </VDropdownItem>
               <VDropdownItem
@@ -612,9 +902,7 @@ onMounted(() => {
               >
                 解锁
               </VDropdownItem>
-              <VDropdownItem v-else @click="doAction(post.name, 'lock', '已锁定')">
-                锁定
-              </VDropdownItem>
+              <VDropdownItem v-else @click="toggleLock(post)">锁定</VDropdownItem>
               <template v-if="post.type === 'QUESTION'">
                 <VDropdownItem
                   v-if="post.solved"
@@ -628,6 +916,7 @@ onMounted(() => {
               </template>
               <VDropdownDivider />
               <VDropdownItem type="danger" @click="onDelete(post)">删除</VDropdownItem>
+              </template>
             </template>
           </VEntity>
         </VEntityContainer>
@@ -635,11 +924,10 @@ onMounted(() => {
 
       <template #footer>
         <VPagination
-          v-model:page="page"
-          v-model:size="size"
+          v-model:page="filters.page"
+          v-model:size="filters.size"
           :total="total"
           :size-options="[20, 30, 50, 100]"
-          @change="fetchPosts"
         />
       </template>
     </VCard>
@@ -648,7 +936,8 @@ onMounted(() => {
   <PostSettingModal
     v-if="settingModalVisible"
     v-model="settingForm"
-    :categories="categoryOptions"
+    :categories="categories"
+    :post-name="settingPost?.name"
     :saving="settingSaving"
     @confirm="saveSetting"
     @close="settingModalVisible = false"
@@ -666,7 +955,11 @@ onMounted(() => {
       type="textarea"
       label="驳回原因"
       :rows="3"
-      :help="`将展示给「${rejectingPost?.title}」的作者，可留空`"
+      :help="
+        rejectingPost
+          ? `将展示给「${rejectingPost.title}」的作者，可留空`
+          : `将展示给选中的 ${batchCount} 篇帖子的作者，可留空`
+      "
     />
     <template #footer>
       <VSpace>
@@ -685,13 +978,19 @@ onMounted(() => {
   >
     <FormKit
       v-model="batchCategoryName"
-      type="select"
+      type="text"
       label="分类"
-      clearable
-      placeholder="选择分类（留空 = 清除分类）"
       :help="`将应用到选中的 ${selected.length} 篇帖子`"
-      :options="categoryOptions"
-    />
+    >
+      <template #input="ctx">
+        <BbsCategorySelect
+          :model-value="String(ctx.value ?? '')"
+          :categories="categories"
+          placeholder="选择分类"
+          @update:model-value="ctx.node.input($event)"
+        />
+      </template>
+    </FormKit>
     <template #footer>
       <VSpace>
         <VButton type="secondary" :loading="batchSaving" @click="batchSetCategory">确定</VButton>
@@ -699,24 +998,25 @@ onMounted(() => {
       </VSpace>
     </template>
   </VModal>
+
+  <!-- 审核记录：唯一入口在行下拉菜单（编辑器不再挂此按钮） -->
+  <PostModerationRecords
+    v-if="moderationName"
+    :post-name="moderationName"
+    mode="console"
+    @close="moderationName = ''"
+  />
+
+  <!-- 评论管理：评论列点击打开（对齐官方按主题查看评论的弹窗） -->
+  <PostCommentListModal
+    v-if="commentsPost"
+    :post-name="commentsPost"
+    @close="commentsPost = ''"
+  />
 </template>
 
 <style scoped>
-.header-icon {
-  margin-right: 0.5rem;
-  align-self: center;
-}
-
-.page-body {
-  margin: 0;
-}
-
-@media (min-width: 768px) {
-  .page-body {
-    margin: 1rem;
-  }
-}
-
+/* bbs-header-icon / bbs-page-body / bbs-refresh-btn / bbs-entity-time 见 styles/tokens.css */
 .list-toolbar {
   display: flex;
   width: 100%;
@@ -767,137 +1067,5 @@ onMounted(() => {
   height: 1rem;
   width: 1rem;
   cursor: pointer;
-}
-
-.refresh-btn {
-  display: flex;
-  cursor: pointer;
-  align-items: center;
-  border-radius: var(--bbs-radius);
-  padding: 0.25rem;
-  transition: var(--bbs-transition);
-}
-
-.refresh-btn:hover {
-  background: var(--bbs-bg-selected);
-}
-
-.refresh-btn__icon {
-  height: 1rem;
-  width: 1rem;
-  color: var(--bbs-text-muted);
-}
-
-.refresh-btn__icon--spin {
-  animation: bbs-spin 1s linear infinite;
-  color: var(--bbs-text);
-}
-
-@keyframes bbs-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.entity-permalink {
-  margin-left: 0.25rem;
-  display: inline-flex;
-  color: var(--bbs-text-faint);
-  opacity: 0;
-  transition: var(--bbs-transition);
-}
-
-.entity-permalink:hover {
-  color: var(--bbs-text);
-}
-
-:deep(.group:hover) .entity-permalink,
-.entity-permalink:focus-visible {
-  opacity: 1;
-}
-
-.entity-permalink__icon {
-  height: 0.875rem;
-  width: 0.875rem;
-}
-
-.entity-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.625rem;
-  font-size: 0.75rem;
-  color: var(--bbs-text-muted);
-}
-
-.entity-meta__faint {
-  color: var(--bbs-text-faint);
-}
-
-.entity-category {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.entity-category__dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 2px;
-  flex: none;
-  background: var(--bbs-border);
-}
-
-.entity-category--none {
-  color: var(--bbs-text-faint);
-}
-
-.entity-comments {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--bbs-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.entity-comments__icon {
-  width: 0.875rem;
-  height: 0.875rem;
-  color: var(--bbs-text-faint);
-}
-
-.bbs-badge {
-  border-radius: var(--bbs-radius);
-  padding: 0.125rem 0.375rem;
-  font-weight: 500;
-}
-
-.bbs-badge--announcement {
-  background: var(--bbs-warning-bg);
-  color: var(--bbs-warning);
-}
-
-.bbs-badge--pinned {
-  background: var(--bbs-accent-bg);
-  color: var(--bbs-accent);
-}
-
-.bbs-badge--question {
-  background: rgba(59, 130, 196, 0.12);
-  color: #3b82c4;
-}
-
-.bbs-badge--solved {
-  background: rgba(46, 158, 91, 0.12);
-  color: #2e9e5b;
-}
-
-.bbs-badge--locked {
-  background: var(--bbs-bg-soft);
-  color: var(--bbs-text-muted);
 }
 </style>

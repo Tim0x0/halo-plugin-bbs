@@ -3,23 +3,25 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title th:text="|${post.title} - ${bbsTitle}|">帖子</title>
+  <title th:text="${documentTitle}">帖子</title>
   <meta name="description" th:if="${!#strings.isEmpty(post.excerpt)}" th:content="${post.excerpt}"/>
+  <link rel="canonical" th:if="${!#strings.isEmpty(canonicalUrl)}" th:href="${canonicalUrl}"/>
   <meta property="og:type" content="article"/>
   <meta property="og:title" th:content="${post.title}"/>
+  <meta property="og:url" th:if="${!#strings.isEmpty(canonicalUrl)}" th:content="${canonicalUrl}"/>
   <meta property="og:description" th:if="${!#strings.isEmpty(post.excerpt)}"
         th:content="${post.excerpt}"/>
   <link rel="stylesheet" th:href="@{/plugins/bbs/assets/static/bbs.css}"/>
   <script th:src="@{/plugins/bbs/assets/static/bbs.js}" defer></script>
-  <!-- 互动装扮（interaction-plus）：样式变量 + 批量取数引导脚本（脚本负责注入 runtime） -->
+  <!-- 互动装扮（interaction-plus）：批量取数引导脚本（脚本负责注入 runtime；无配套 CSS） -->
   <th:block th:if="${hipEnabled}">
-    <link rel="stylesheet" th:href="@{/plugins/interaction-plus/assets/runtime/interaction-plus.runtime.css}"/>
     <script th:src="@{/plugins/bbs/assets/static/bbs-hip.js}" defer></script>
   </th:block>
 </head>
 <!-- has-mreply：移动端启用底部固定「写评论」栏 -->
 <body class="bbs-body has-mreply"
-      th:style="|--b-accent:${accentColor}|">
+      th:classappend="${#strings.isEmpty(accentColor)} ? 'is-unthemed' : ''"
+      th:style="${!#strings.isEmpty(accentColor)} ? |--b-accent:${accentColor}| : ''">
 
 <!-- 白色顶栏（与列表页一致） -->
 <header class="bbs-hd">
@@ -46,7 +48,7 @@
         <img class="bbs-me__ava" th:if="${!#strings.isEmpty(me.avatar)}"
              th:src="${me.avatar}" th:alt="${me.displayName}"/>
         <span class="bbs-me__ava bbs-me__ava--letter" th:if="${#strings.isEmpty(me.avatar)}"
-              th:text="${#strings.substring(me.displayName, 0, 1)}">A</span>
+              th:attr="data-bbs-letter=${me.displayName}">?</span>
       </button>
       <div class="bbs-drop__panel">
         <div class="bbs-menu__name" th:text="${me.displayName}">我</div>
@@ -97,20 +99,27 @@
          th:text="${post.category.displayName}">分类</a>
     </th:block>
   </nav>
-  <!-- 标记行（spec §2.2 B 套）：分类 Tag + 圆标（公告/置顶/问答），无锁；
+  <!-- 标记行：分类 Tag + 圆标（公告/置顶/问答），无锁；
        问答圆标始终显示（解决与否都有，解决另有绿 tip） -->
   <div class="bbs-phero__marks"
        th:if="${post.category != null || post.pinned || post.type == 'ANNOUNCEMENT' || post.type == 'QUESTION'}">
     <a class="bbs-stag" th:if="${post.category != null and post.category.parent != null}"
        th:href="@{/bbs(category=${post.category.parent.slug})}"
-       th:style="|--c1:${post.category.parent.color};--c2:${post.category.color}|">
-      <span class="bbs-stag__p" th:text="${post.category.parent.displayName}">父分类</span>
-      <span class="bbs-stag__c" th:text="${post.category.displayName}">分类</span>
+       th:style="${(!#strings.isEmpty(post.category.parent.color) ? '--c1:' + post.category.parent.color + ';' : '')
+                 + (!#strings.isEmpty(post.category.color) ? '--c2:' + post.category.color : '')}">
+      <span class="bbs-stag__p"
+            th:classappend="${#strings.isEmpty(post.category.parent.color)} ? 'is-plain' : ''"
+            th:text="${post.category.parent.displayName}">父分类</span>
+      <span class="bbs-stag__c"
+            th:classappend="${#strings.isEmpty(post.category.color)} ? 'is-plain' : ''"
+            th:text="${post.category.displayName}">分类</span>
     </a>
     <a class="bbs-stag bbs-stag--solo" th:if="${post.category != null and post.category.parent == null}"
        th:href="@{/bbs(category=${post.category.slug})}"
-       th:style="|--c1:${post.category.color}|">
-      <span class="bbs-stag__p" th:text="${post.category.displayName}">分类</span>
+       th:style="${!#strings.isEmpty(post.category.color)} ? |--c1:${post.category.color}| : ''">
+      <span class="bbs-stag__p"
+            th:classappend="${#strings.isEmpty(post.category.color)} ? 'is-plain' : ''"
+            th:text="${post.category.displayName}">分类</span>
     </a>
     <span class="bbs-bic bbs-bic--ann" th:if="${post.type == 'ANNOUNCEMENT'}" title="公告" aria-label="公告"><svg viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M480 32c0-12.9-7.8-24.6-19.8-29.6s-25.7-2.2-34.9 6.9L381.7 53c-48 48-113.1 75-181 75l-8.7 0-32 0-96 0c-35.3 0-64 28.7-64 64l0 96c0 35.3 28.7 64 64 64l0 128c0 17.7 14.3 32 32 32l64 0c17.7 0 32-14.3 32-32l0-128 8.7 0c67.9 0 133 27 181 75l43.6 43.6c9.2 9.2 22.9 11.9 34.9 6.9s19.8-16.6 19.8-29.6l0-147.6c18.6-8.8 32-32.5 32-60.4s-13.4-51.6-32-60.4L480 32z"/></svg></span>
     <span class="bbs-bic bbs-bic--pin" th:if="${post.pinned}" title="置顶" aria-label="置顶"><svg viewBox="0 0 384 512" fill="currentColor" aria-hidden="true"><path d="M32 32C32 14.3 46.3 0 64 0L320 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-29.5 0 11.4 148.2c36.7 19.9 65.7 53.2 79.5 94.7l1 3c3.3 9.8 1.6 20.5-4.4 28.8s-15.7 13.3-26 13.3L32 352c-10.3 0-19.9-4.9-26-13.3s-7.7-19-4.4-28.8l1-3c13.8-41.5 42.8-74.8 79.5-94.7L93.5 64 64 64C46.3 64 32 49.7 32 32zM160 384l64 0 0 96c0 17.7-14.3 32-32 32s-32-14.3-32-32l0-96z"/></svg></span>
@@ -123,7 +132,7 @@
   </div>
 </section>
 
-<!-- 已解决绿 tip（spec §2.2：问答帖解决后，标题下独立状态条） -->
+<!-- 已解决绿 tip：问答帖解决后，标题下独立状态条 -->
 <div class="bbs-notice bbs-notice--ok" th:if="${post.type == 'QUESTION' and post.solved}">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
   该问题已解决
@@ -133,48 +142,48 @@
   <!-- 帖子流：楼主为第一楼，评论区（评论组件渲染）顺延融入，同一背景无卡片 -->
   <main class="bbs-stream">
     <article class="bbs-post">
-      <!-- 头像为悬浮名片触发器（interaction-plus 启用后点击弹卡）；昵称保持链接跳作者页。
+      <!-- 头像为悬浮名片触发器（interaction-plus 启用后点击弹卡）。
            未注册时两层包装均 display:contents，原生头像直接显示 -->
       <hip-user-card th:if="${post.owner != null}" th:attr="user-name=${post.owner.name}">
-        <hip-user-avatar size="48px" th:attr="user-name=${post.owner.name}">
+        <hip-user-avatar scene="post" th:attr="user-name=${post.owner.name}">
           <img class="bbs-ava bbs-ava--lg" th:if="${!#strings.isEmpty(post.owner.avatar)}"
                th:src="${post.owner.avatar}" th:alt="${post.owner.displayName}"/>
           <span class="bbs-ava bbs-ava--lg bbs-ava--letter"
                 th:if="${#strings.isEmpty(post.owner.avatar)}"
-                th:text="${#strings.substring(post.owner.displayName, 0, 1)}">A</span>
+                th:attr="data-bbs-letter=${post.owner.displayName}">?</span>
         </hip-user-avatar>
       </hip-user-card>
       <span class="bbs-ava bbs-ava--lg bbs-ava--letter" th:if="${post.owner == null}">匿</span>
 
       <div class="bbs-post__main">
         <div class="bbs-post__head">
-          <!-- 作者链接同列表：authorLinkTemplate 空则纯文本；头像仍走名片 -->
-          <th:block th:if="${post.owner != null}"
+          <!-- hip 开启：身份行自己按 userCardLinkTemplate 跳转，外面不再套 a（避免套娃）。
+               hip 关闭：与列表相同，authorLinkTemplate 空则纯文本 -->
+          <span class="bbs-post__name" th:if="${post.owner != null and hipEnabled}">
+            <hip-user-identity scene="post" th:attr="user-name=${post.owner.name}">
+              <span th:text="${post.owner.displayName}">作者</span>
+            </hip-user-identity>
+          </span>
+          <th:block th:if="${post.owner != null and !hipEnabled}"
                     th:with="authorHref=${!#strings.isEmpty(authorLinkTemplate)
                         ? #strings.replace(authorLinkTemplate, '{name}',
                             #uris.escapePathSegment(post.owner.name))
                         : ''}">
             <a class="bbs-post__name" th:if="${!#strings.isEmpty(authorHref)}"
-               th:href="${authorHref}">
-              <hip-user-identity th:attr="user-name=${post.owner.name}">
-                <span th:text="${post.owner.displayName}">作者</span>
-              </hip-user-identity>
-            </a>
-            <span class="bbs-post__name" th:if="${#strings.isEmpty(authorHref)}">
-              <hip-user-identity th:attr="user-name=${post.owner.name}">
-                <span th:text="${post.owner.displayName}">作者</span>
-              </hip-user-identity>
-            </span>
+               th:href="${authorHref}" th:text="${post.owner.displayName}">作者</a>
+            <span class="bbs-post__name" th:if="${#strings.isEmpty(authorHref)}"
+                  th:text="${post.owner.displayName}">作者</span>
           </th:block>
           <span class="bbs-post__name" th:if="${post.owner == null}">匿名</span>
           <span class="bbs-op">楼主</span>
           <span class="bbs-post__time">
             <th:block th:if="${post.publishTime != null}">发布于
-              <time class="bbs-time" th:attr="datetime=${post.publishTime}"
-                    th:text="${#temporals.format(post.publishTime, dateFormat)}">时间</time>
+              <time th:attr="datetime=${post.publishTime}"
+                    th:title="${bbsTime.absTitle(post.publishTime)}"
+                    th:text="${bbsTime.display(post.publishTime, dateFormat)}">时间</time>
             </th:block>
             <span class="bbs-edited" th:if="${post.lastEditTime != null}"
-                  th:title="|编辑于 ${#temporals.format(post.lastEditTime, dateFormat)}|">
+                  th:title="|编辑于 ${bbsTime.absTitle(post.lastEditTime)}|">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 20h9"/>
@@ -207,25 +216,24 @@
 
     <!-- 评论区：正常状态渲染 Halo 评论组件，透明融入帖子流（无卡片）；
          列表页评论数直达此锚点，移动端底部栏亦跳转到这里。
-         锁定 / 关闭评论：评论组件为 shadow DOM 无法隐藏其输入框，
-         故直接不渲染组件，历史评论改由 bbs.js 走 Halo 公开评论 API 只读渲染 -->
+         锁定：评论组件为 shadow DOM 无法隐藏其输入框，
+         故直接不渲染组件，历史评论改由 bbs.js 走 BBS 自建只读端点渲染 -->
     <section class="bbs-cmts" id="comments">
-      <div class="bbs-cmts__head">
-        <b th:text="${post.commentCount != null ? post.commentCount : 0}">0</b> 条评论
-      </div>
+      <!-- 锁定说明条：评论区上方，先于「N 条评论」标题 -->
       <div class="bbs-cmts__closed" th:if="${post.locked}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.35"
              stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="2"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/></svg>
         该帖已锁定，不能回复
       </div>
-      <div class="bbs-cmts__closed" th:if="${!post.locked and !post.allowComment}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="m2 2 20 20"/></svg>
-        作者已关闭回复
+      <div class="bbs-cmts__head">
+        <b th:text="${post.commentsCount != null ? post.commentsCount : 0}">0</b> 条评论
       </div>
-      <div id="bbsRoComments" th:if="${post.locked or !post.allowComment}"
-           th:attr="data-post-name=${post.name}"></div>
-      <halo:comment th:unless="${post.locked or !post.allowComment}"
+      <!-- data-owner-name：楼主 username，脚本据此给同人的楼层挂「楼主」标签；
+           data-author-link：同帖子页的作者链接模板（空则楼层昵称不可点）；
+           data-hip：开启时身份行自己跳转，脚本不再外包 a -->
+      <div id="bbsRoComments" th:if="${post.locked}"
+           th:attr="data-post-name=${post.name}, data-date-format=${dateFormat}, data-owner-name=${post.owner != null ? post.owner.name : ''}, data-author-link=${authorLinkTemplate}, data-hip=${hipEnabled}"></div>
+      <halo:comment th:unless="${post.locked}"
                     group="bbs.timxs.com" kind="BbsPost" th:attr="name=${post.name}" />
     </section>
 
@@ -253,9 +261,8 @@
 
   <!-- 右栏：回复按钮 + 分享 + 目录（enableToc 且正文 h2/h3 ≥ 3 时由 bbs.js 填充；移动端整栏隐藏） -->
   <aside class="bbs-pside">
-    <a class="bbs-start" th:if="${post.allowComment and !post.locked}" href="#comments">回复帖子</a>
+    <a class="bbs-start" th:unless="${post.locked}" href="#comments">回复帖子</a>
     <span class="bbs-start is-disabled" th:if="${post.locked}">已锁定</span>
-    <span class="bbs-start is-disabled" th:if="${!post.locked and !post.allowComment}">评论已关闭</span>
     <!-- 分享=复制链接（纯前端，bbs.js 处理） -->
     <button type="button" class="bbs-side-share js-share">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -289,12 +296,12 @@
 <!-- 移动端底部固定栏：回复主按钮 + 分享图标按钮（右栏移动端隐藏，分享入口收在这里） -->
 <div class="bbs-mreply">
   <a class="bbs-mreply__in" href="#comments"
-     th:classappend="${post.locked or !post.allowComment} ? 'is-disabled' : ''">
+     th:classappend="${post.locked} ? 'is-disabled' : ''">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
-    <span th:text="${post.locked ? '已锁定' : (!post.allowComment ? '评论已关闭' : '回复帖子')}">回复帖子</span>
+    <span th:text="${post.locked ? '已锁定' : '回复帖子'}">回复帖子</span>
   </a>
   <button type="button" class="bbs-mreply__share js-share" aria-label="分享">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

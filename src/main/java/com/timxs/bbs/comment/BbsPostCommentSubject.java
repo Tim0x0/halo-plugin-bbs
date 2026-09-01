@@ -1,6 +1,7 @@
 package com.timxs.bbs.comment;
 
 import com.timxs.bbs.extension.BbsPost;
+import com.timxs.bbs.util.BbsUrls;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
@@ -37,7 +38,7 @@ public class BbsPostCommentSubject implements CommentSubject<BbsPost> {
     public Mono<SubjectDisplay> getSubjectDisplay(String name) {
         return get(name).map(post -> new SubjectDisplay(
                 post.getSpec().getTitle(),
-                "/bbs/post/" + post.getSpec().getSlug(),
+                BbsUrls.postPermalink(post.getSpec().getSlug()),
                 "BBS 帖子"));
     }
 

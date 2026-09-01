@@ -10,10 +10,14 @@ import run.halo.app.extension.ListResult;
 import run.halo.app.theme.finders.Finder;
 
 /**
- * 前台主题可调用的BBS 社区数据查询器，模板变量名 {@code ${bbs}}。
+ * 前台主题可调用的 BBS 社区数据查询器，模板变量名 {@code ${bbs}}。
  *
  * <p>只服务前台：所有列表均只含已发布内容；VO 自包含（分类 / 作者展示属性内联），
  * 主题拿到即可直接渲染。消费方应忽略未知字段（后续演进只增不改）。</p>
+ *
+ * <p><b>不抛异常</b>：分类 slug 无效（停用 / 不存在 / 拼错）时返回空列表而非报错——
+ * 模板里写错一个 slug 只该让那一块空着，不该打断整页渲染。需要「无效分类报 404」的
+ * 是对外 HTTP 端点，不是主题。</p>
  *
  * <p>模板用法示例：</p>
  * <pre>{@code
@@ -32,7 +36,7 @@ public class BbsFinder {
         this.queryService = queryService;
     }
 
-    /** 已发布普通帖子分页（置顶优先，发布时间倒序）。 */
+    /** 已发布内容分页（含公告 / 问答；默认最后活跃，置顶按作用域浮顶）。 */
     public Mono<ListResult<BbsPostVo>> listPosts(int page, int size) {
         return queryService.listPublicPosts(page, size, null, null, null);
     }
@@ -54,7 +58,7 @@ public class BbsFinder {
         return queryService.listPublicPosts(page, size, null, categorySlug, keyword, sort, type);
     }
 
-    /** 按分类 slug 过滤的已发布帖子分页。 */
+    /** 按分类 slug 过滤的已发布内容分页（一级分类含其全部子分类）。 */
     public Mono<ListResult<BbsPostVo>> listPostsByCategory(String categorySlug, int page,
             int size) {
         return queryService.listPublicPosts(page, size, null, categorySlug, null);
@@ -74,6 +78,11 @@ public class BbsFinder {
     /** 最新已发布内容（含公告，纯发布时间倒序，不做置顶提权）——RSS / 时间线场景。 */
     public Flux<BbsPostVo> listLatest(int size) {
         return queryService.listLatestPublished(size);
+    }
+
+    /** 全站最多回复的已发布内容（纯评论数排序，不受置顶与发布时间窗口影响）。 */
+    public Flux<BbsPostVo> listMostReplied(int size) {
+        return queryService.listMostRepliedPublished(size);
     }
 
     /**

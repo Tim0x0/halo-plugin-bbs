@@ -13,7 +13,8 @@ import lombok.Data;
 @Schema(name = "BbsPostRequest")
 public class PostRequest {
 
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, maxLength = 200, description = "标题")
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, maxLength = 200,
+            description = "标题（草稿为空时服务端补为“未命名”）")
     private String title;
 
     @Schema(description = "别名，留空自动生成", maxLength = 200)
@@ -23,17 +24,19 @@ public class PostRequest {
             + "且用户侧编辑公告时类型保持不变）")
     private BbsPost.PostType type;
 
-    @Schema(description = "所属分类的 metadata.name")
+    @Schema(description = "所属分类的 metadata.name（草稿可空，正式提交必填）")
     private String categoryName;
 
-    @Schema(description = "摘要，留空自动从正文截取", maxLength = 500)
+    @Schema(description = "手工摘要原文（autoExcerpt=false 时生效）", maxLength = 500)
     private String excerpt;
 
-    @Schema(description = "正文 HTML（服务端会做白名单净化）")
-    private String content;
+    @Schema(description = "摘要是否自动从正文截取；null 表示不修改（新建默认 true）")
+    private Boolean autoExcerpt;
 
-    @Schema(description = "是否允许评论（作者可设；null 表示不修改，新建默认允许）")
-    private Boolean allowComment;
+    @Schema(description = "正文 HTML（服务端会做白名单净化）。创建与「元数据+正文」一次性"
+            + "保存时使用，对齐官方 PostRequest；只改正文请走 /content 通道，那条路支持"
+            + "并发冲突检测")
+    private String content;
 
     @Schema(description = "是否置顶（仅管理端）")
     private Boolean pinned;

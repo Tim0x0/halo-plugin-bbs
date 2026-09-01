@@ -2,25 +2,29 @@ package com.timxs.bbs.router;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
-import static run.halo.app.extension.index.query.Queries.and;
-import static run.halo.app.extension.index.query.Queries.equal;
-import static run.halo.app.extension.index.query.Queries.in;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.timxs.bbs.finder.BbsFinder;
+import com.timxs.bbs.service.BbsRoles;
+import com.timxs.bbs.service.BbsSettings;
+import com.timxs.bbs.util.BbsPageRequests;
+import com.timxs.bbs.util.BbsTimeFormats;
 import com.timxs.bbs.vo.BbsPostVo;
+import com.timxs.bbs.vo.CategoryVo;
 import com.timxs.bbs.vo.OwnerVo;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Year;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import run.halo.app.core.extension.RoleBinding;
-import run.halo.app.core.extension.User;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.stereotype.Component;
@@ -28,20 +32,23 @@ import org.springframework.web.reactive.function.server.HandlerFunction;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import run.halo.app.core.user.service.RoleService;
 import run.halo.app.extension.ConfigMap;
-import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ListResult;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.infra.AnonymousUserConst;
+import run.halo.app.infra.ExternalUrlSupplier;
 import run.halo.app.infra.SystemInfoGetter;
-import run.halo.app.plugin.ReactiveSettingFetcher;
 import run.halo.app.theme.TemplateNameResolver;
 import run.halo.app.theme.router.ModelConst;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * BBS 社区前台路由：列表页 {@code /bbs}（?category={slug}&q=&page=）与
- * 详情页 {@code /bbs/post/{slug}}。
+ * 详情页 {@code /bbs/post/{slug}}（列表另支持 {@code sort}/{@code type}）。
  *
  * <p>模板视图名经 {@link TemplateNameResolver} 解析——激活主题若提供同名模板
  * （{@code bbs.html} / {@code bbs_post.html}）则优先使用，否则回退到插件
@@ -60,10 +67,9 @@ public class BbsRouter {
     /** 相关推荐策略白名单（与 settings.yaml options 对齐）。 */
     private static final Set<String> RELATED_STRATEGIES =
             Set.of("category-latest", "latest", "most-reply", "same-author", "relevance");
-    private static final String DEFAULT_ACCENT_COLOR = "#4d698e";
-    private static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    private static final String DEFAULT_DATE_FORMAT = "relative";
     private static final Set<String> DATE_FORMATS =
-            Set.of("yyyy-MM-dd", "yyyy-MM-dd HH:mm", "MM-dd");
+            Set.of("relative", "yyyy-MM-dd", "yyyy-MM-dd HH:mm", "MM-dd");
     /** BBS 作者链接默认目标：Halo 主题作者页。 */
     private static final String DEFAULT_AUTHOR_LINK_TEMPLATE = "/authors/{name}";
     /** interaction-plus 插件 ConfigMap（与其 plugin.yaml configMapName 一致）。 */
@@ -71,22 +77,29 @@ public class BbsRouter {
     /** hip 展示配置组名（含 userCardLinkTemplate）。 */
     private static final String HIP_DISPLAY_GROUP = "decoration.display";
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final JsonMapper JSON = new JsonMapper();
 
     private final BbsFinder bbsFinder;
     private final TemplateNameResolver templateNameResolver;
-    private final ReactiveSettingFetcher settingFetcher;
+    private final BbsSettings settings;
     private final SystemInfoGetter systemInfoGetter;
     private final ReactiveExtensionClient client;
+    private final BbsTimeFormats bbsTimeFormats;
+    private final RoleService roleService;
+    private final ExternalUrlSupplier externalUrlSupplier;
 
     public BbsRouter(BbsFinder bbsFinder, TemplateNameResolver templateNameResolver,
-            ReactiveSettingFetcher settingFetcher, SystemInfoGetter systemInfoGetter,
-            ReactiveExtensionClient client) {
+            BbsSettings settings, SystemInfoGetter systemInfoGetter,
+            ReactiveExtensionClient client, BbsTimeFormats bbsTimeFormats,
+            RoleService roleService, ExternalUrlSupplier externalUrlSupplier) {
         this.bbsFinder = bbsFinder;
         this.templateNameResolver = templateNameResolver;
-        this.settingFetcher = settingFetcher;
+        this.settings = settings;
         this.systemInfoGetter = systemInfoGetter;
         this.client = client;
+        this.bbsTimeFormats = bbsTimeFormats;
+        this.roleService = roleService;
+        this.externalUrlSupplier = externalUrlSupplier;
     }
 
     @Bean
@@ -105,7 +118,7 @@ public class BbsRouter {
         return request -> Mono.zip(loadConfig(), currentUser(), siteTitle()).flatMap(tuple -> {
             var cfg = tuple.getT1();
             var me = tuple.getT2().orElse(null);
-            int page = resolvePage(request);
+            int page = BbsPageRequests.page(request, 1);
             String categorySlug = request.queryParam("category")
                     .filter(StringUtils::isNotBlank).orElse("");
             String keyword = request.queryParam("q")
@@ -118,42 +131,70 @@ public class BbsRouter {
                     .map(String::toLowerCase)
                     .filter(LIST_TYPES::contains).orElse("");
 
-            var posts = bbsFinder.list(page, cfg.pageSize(), categorySlug, keyword, sort,
-                    type.isEmpty() ? null : type);
-
-            Map<String, Object> model = new HashMap<>();
-            model.put("posts", posts);
-            // 分类树（一级含 children）——首页分区卡片与移动端分类菜单
-            model.put("categories", bbsFinder.listCategoryTree().collectList());
-            model.put("currentCategory", categorySlug);
-            // 当前分类完整 VO（hero 主题色 / 封面、面包屑、子分类 chips）；无过滤时为 null
-            model.put("currentCategoryVo", StringUtils.isBlank(categorySlug)
-                    ? Mono.empty()
-                    : bbsFinder.getCategoryBySlug(categorySlug));
-            // 移动端「当前分类 ▾」按钮文案：无过滤或 slug 无效时回退「全部帖子」
-            model.put("currentCategoryName", StringUtils.isBlank(categorySlug)
-                    ? Mono.just("全部帖子")
-                    : bbsFinder.getCategoryBySlug(categorySlug)
-                            .map(c -> c.getDisplayName())
-                            .defaultIfEmpty("全部帖子"));
-            model.put("currentSort", sort);
-            model.put("currentType", type);
-            model.put("keyword", keyword == null ? "" : keyword);
-            model.put("currentPage", page);
-            model.put("title", cfg.pageTitle());
-            putCommonModel(model, request, cfg, me, tuple.getT3());
-            // 列表页 SEO：直接用社区副标题
-            model.put("metaDescription", cfg.slogan());
-            model.put(ModelConst.TEMPLATE_ID, "bbs");
-            // 管理权限 SSR 判定：显式 resolve 成同步 Boolean，避免依赖 view 层 unwrap Mono
-            return hasAdminPermission(me != null ? me.getName() : null)
-                    .flatMap(hasAdmin -> {
-                        model.put("hasAdminPermission", hasAdmin);
-                        return templateNameResolver
-                                .resolveTemplateNameOrDefault(request.exchange(), "bbs")
-                                .flatMap(template -> ServerResponse.ok().render(template, model));
-                    });
+            if (StringUtils.isBlank(categorySlug)) {
+                return renderList(request, cfg, me, tuple.getT3(), page, "", keyword, sort, type,
+                        Mono.empty(), null);
+            }
+            // 停用 / 不存在的分类不能回首页（会把全站列表当成该分类页）。
+            // 以 404 结束：错误页渲染由 Halo + 激活主题负责（官方 SinglePageRoute
+            // 抛 NotFoundException 同样是给异常管道一个 404 状态；插件 jar 不暴露
+            // 该异常类，用等价的 ResponseStatusException）。
+            return bbsFinder.getCategoryBySlug(categorySlug)
+                    .flatMap(cat -> renderList(request, cfg, me, tuple.getT3(), page, categorySlug,
+                            keyword, sort, type, Mono.just(cat), cat.getDisplayName()))
+                    .switchIfEmpty(Mono.error(new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "分类不存在")));
         });
+    }
+
+    /**
+     * @param categoryTitle 分类页的分类名（首页为 null）——只用于浏览器标题；
+     *                      调用点已在 flatMap 里拿到同步的 CategoryVo，不必从 Mono 里再取
+     */
+    private Mono<ServerResponse> renderList(ServerRequest request, BbsConfig cfg, OwnerVo me,
+            String siteTitle, int page, String categorySlug, String keyword, String sort,
+            String type, Mono<CategoryVo> categoryVo, String categoryTitle) {
+        var posts = bbsFinder.list(page, cfg.pageSize(), categorySlug, keyword, sort,
+                type.isEmpty() ? null : type);
+        Map<String, Object> model = new HashMap<>();
+        model.put("posts", posts);
+        model.put("categories", bbsFinder.listCategoryTree().collectList());
+        model.put("currentCategory", categorySlug);
+        model.put("currentCategoryVo", categoryVo);
+        model.put("currentCategoryName", StringUtils.isBlank(categorySlug)
+                ? Mono.just("全部帖子")
+                : categoryVo.map(CategoryVo::getDisplayName));
+        model.put("currentSort", sort);
+        model.put("currentType", type);
+        model.put("keyword", keyword == null ? "" : keyword);
+        model.put("currentPage", page);
+        model.put("title", cfg.pageTitle());
+        // 浏览器标题（段之间用配置的分隔符，空段自动跳过）：
+        // - 首页第 1 页「社区名 - 副标题」；第 2 页起副标题让位给页码（副标题是入口页的介绍）
+        // - 分类页「分类名 [- 第 N 页] - 社区名」：分类页是内页，对齐详情页
+        // 分页必须进标题：否则第 2 页与第 1 页标题逐字相同，与分类页撞车是同一类 duplicate title。
+        // 搜索 / 类型筛选刻意不进标题（那些页不该被索引，拼进来只会又长又碎）。
+        // ${title} 仍是纯社区名，顶栏 logo 文字与 Hero h1 继续用它。
+        String pageLabel = page > 1 ? "第 " + page + " 页" : null;
+        boolean isCategoryPage = StringUtils.isNotBlank(categoryTitle);
+        model.put("documentTitle", isCategoryPage
+                ? cfg.documentTitle(categoryTitle, pageLabel, cfg.pageTitle())
+                : cfg.documentTitle(cfg.pageTitle(), page > 1 ? pageLabel : cfg.slogan()));
+        // og:title 用页面主体（不带社区名后缀），与详情页 og:title=帖子标题 对齐
+        model.put("ogTitle", isCategoryPage ? categoryTitle : cfg.pageTitle());
+        // canonical：只保留分类与页码，丢弃 sort / type / q——那些是同一批内容的不同视图，
+        // 各自被索引会产生大量重复内容
+        model.put("canonicalUrl", canonicalListUrl(siteBaseUrl(request), categorySlug, page));
+        putCommonModel(model, request, cfg, me, siteTitle);
+        model.put("metaDescription", cfg.slogan());
+        model.put(ModelConst.TEMPLATE_ID, "bbs");
+        return hasAdminPermission(me != null ? me.getName() : null)
+                .flatMap(hasAdmin -> {
+                    model.put("hasAdminPermission", hasAdmin);
+                    return templateNameResolver
+                            .resolveTemplateNameOrDefault(request.exchange(), "bbs")
+                            .flatMap(template -> ServerResponse.ok().render(template, model));
+                });
     }
 
     /** 详情页：仅已发布帖子可访问，未找到 404；附同分类最新帖子推荐。 */
@@ -162,6 +203,8 @@ public class BbsRouter {
             var cfg = tuple.getT1();
             var me = tuple.getT2().orElse(null);
             String slug = request.pathVariable("slug");
+            // 未找到以 404 结束（官方 SinglePageRoute 抛 NotFoundException 同理），
+            // 错误页渲染由 Halo + 激活主题负责
             return bbsFinder.getBySlug(slug)
                     .flatMap(post -> {
                         Map<String, Object> model = new HashMap<>();
@@ -171,6 +214,11 @@ public class BbsRouter {
                         model.put("relatedStrategy", cfg.relatedPostStrategy());
                         model.put("bbsTitle", cfg.pageTitle());
                         model.put("title", post.getTitle());
+                        // 详情页后缀用社区名而非副标题：读者要认出「这是哪儿」
+                        model.put("documentTitle",
+                                cfg.documentTitle(post.getTitle(), cfg.pageTitle()));
+                        // canonical：帖子的规范地址就是它的 permalink（绝对 URL，og:url 共用）
+                        model.put("canonicalUrl", siteBaseUrl(request) + post.getPermalink());
                         putCommonModel(model, request, cfg, me, tuple.getT3());
                         model.put(ModelConst.TEMPLATE_ID, "bbs_post");
                         return hasAdminPermission(me != null ? me.getName() : null)
@@ -181,7 +229,8 @@ public class BbsRouter {
                                             .flatMap(template -> ServerResponse.ok().render(template, model));
                                 });
                     })
-                    .switchIfEmpty(ServerResponse.notFound().build());
+                    .switchIfEmpty(Mono.error(new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "帖子不存在")));
         });
     }
 
@@ -203,18 +252,26 @@ public class BbsRouter {
                 ? strategy : DEFAULT_RELATED_STRATEGY;
         int fetch = Math.min(count + 1, 50);
         return switch (s) {
-            case "latest" -> pick(bbsFinder.listPosts(1, fetch), post, count, false);
-            case "most-reply" -> pick(bbsFinder.list(1, Math.min(count + 5, 50),
-                    null, null, "hot", null), post, count, false);
+            case "latest" -> pick(bbsFinder.listLatest(fetch), post, count);
+            case "most-reply" -> pick(bbsFinder.listMostReplied(fetch), post, count);
             case "same-author" -> post.getOwner() != null
                     ? pick(bbsFinder.listPostsByOwner(post.getOwner().getName(), 1, fetch),
                             post, count, false)
                     : pick(bbsFinder.listPosts(1, fetch), post, count, false);
             case "relevance" -> loadRelevance(post, count);
             default -> pick(post.getCategory() != null
-                    ? bbsFinder.listPostsByCategory(post.getCategory().getSlug(), 1, fetch)
-                    : bbsFinder.listPosts(1, fetch), post, count, false);
+                    ? bbsFinder.listLatestByCategory(post.getCategory().getSlug(), fetch)
+                    : bbsFinder.listLatest(fetch), post, count);
         };
+    }
+
+    /** 取时间线 / 索引排序结果，排除当前帖后截断。 */
+    private Mono<List<BbsPostVo>> pick(Flux<BbsPostVo> source,
+            BbsPostVo post, int count) {
+        return source
+                .filter(candidate -> !candidate.getName().equals(post.getName()))
+                .take(count)
+                .collectList();
     }
 
     /** 取候选、排除当前帖；relevance=true 走相关度评分降序，否则保持原序后截断。 */
@@ -313,14 +370,6 @@ public class BbsRouter {
         return (double) inter / (a.size() + b.size() - inter);
     }
 
-    private int resolvePage(ServerRequest request) {
-        return request.queryParam("page")
-                .filter(s -> s.matches("\\d+"))
-                .map(Integer::parseInt)
-                .map(p -> Math.max(1, p))
-                .orElse(1);
-    }
-
     /**
      * 各页共用 model：登录态、回跳、互动增强、作者链接、页脚、外观/浏览开关与徽标。
      */
@@ -329,6 +378,7 @@ public class BbsRouter {
         model.put("me", me);
         model.put("requestPath", requestPath(request));
         model.put("hipEnabled", cfg.interactionPlus());
+        model.put("listDecoration", cfg.listDecoration());
         model.put("authorLinkTemplate", cfg.authorLinkTemplate());
         model.put("siteTitle", StringUtils.defaultIfBlank(siteTitle, cfg.pageTitle()));
         model.put("footerNotice", cfg.footerNotice());
@@ -339,9 +389,10 @@ public class BbsRouter {
         model.put("slogan", cfg.slogan());
         model.put("showHero", cfg.showHero());
         model.put("bannerUrl", cfg.bannerUrl());
-        model.put("showStats", cfg.showStats());
         model.put("listShowExcerpt", cfg.listShowExcerpt());
         model.put("dateFormat", cfg.dateFormat());
+        // 经 model 注入，模板用 ${bbsTime.display(...)}，勿用 @bbsTime（主题上下文无插件 bean）
+        model.put("bbsTime", bbsTimeFormats);
         model.put("enableToc", cfg.enableToc());
     }
 
@@ -364,26 +415,30 @@ public class BbsRouter {
     }
 
     /**
-     * 当前用户是否具备本插件管理权限（版主 / 管理，spec §0 D2 SSR 判定）。
-     * 查 RoleBinding：subject 为该用户且 roleRef 为 bbs-moderate / bbs-manage
-     * （后者 dependencies 继承前者，二者均属管理级）。失败静默回退 false，
-     * 避免前台菜单因查询异常而炸。
+     * 当前用户是否具备本插件管理权限（版主 / 管理）。SSR 阶段判定，
+     * 避免无权限用户在 HTML 源码里看到「后台管理」入口。
+     * 失败静默回退 false，避免前台菜单因查询异常而炸。
      */
     private Mono<Boolean> hasAdminPermission(String username) {
         if (StringUtils.isBlank(username)) {
             return Mono.just(false);
         }
-        // 走索引计数（countBy 不反序列化记录，最轻）：
-        // subjects 多索引值 = apiGroup/kind/name，User 即 "rbac.../User/{username}"；
-        // roleRef.name 单索引 in {bbs-moderate, bbs-manage}（后者 dependencies 继承前者）
-        var options = ListOptions.builder()
-                .fieldQuery(and(
-                        in("roleRef.name", List.of("bbs-moderate", "bbs-manage")),
-                        equal("subjects", User.GROUP + "/" + User.KIND + "/" + username)
-                ))
-                .build();
-        return client.countBy(RoleBinding.class, options)
-                .map(count -> count > 0)
+        // 故意展开组角色 / 聚合角色 / super-role：只决定入口显隐，判宽无害。
+        // 管辖判定见 BbsModerationScope，那边绝不能展开。
+        return roleService.getRolesByUsername(username)
+                .collectList()
+                .flatMap(roles -> {
+                    if (roles.stream().anyMatch(r ->
+                            BbsRoles.SUPER.equals(r)
+                                    || BbsRoles.MODERATE.equals(r)
+                                    || BbsRoles.MANAGE.equals(r))) {
+                        return Mono.just(true);
+                    }
+                    return roleService.listDependenciesFlux(new HashSet<>(roles))
+                            .map(role -> role.getMetadata().getName())
+                            .any(name -> BbsRoles.MODERATE.equals(name)
+                                    || BbsRoles.MANAGE.equals(name));
+                })
                 .defaultIfEmpty(false)
                 .onErrorResume(e -> {
                     log.debug("查询 BBS 管理权限失败，隐藏后台管理入口: {}", e.toString());
@@ -400,6 +455,36 @@ public class BbsRouter {
     }
 
     /**
+     * 列表页 canonical：绝对 URL，只保留 {@code category} 与 {@code page}。
+     *
+     * <p>{@code sort} / {@code type} / {@code q} 一律丢弃——它们是同一批内容的不同视图或
+     * 搜索结果，各自被索引就是重复内容。第 1 页不写 {@code page=1}，避免
+     * {@code /bbs} 与 {@code /bbs?page=1} 互指两个 URL。</p>
+     *
+     * <p>用绝对 URL：`og:url` 按 OG 规范必须绝对（相对值会被抓取方解析错），canonical
+     * 绝对也是推荐做法。基地址取 {@link ExternalUrlSupplier}——与本插件 RSS 生成绝对链接
+     * 同一来源，站点地址未配置时 Halo 以当前请求兜底。</p>
+     */
+    private static String canonicalListUrl(String baseUrl, String categorySlug, int page) {
+        StringBuilder sb = new StringBuilder(baseUrl).append("/bbs");
+        boolean hasCategory = StringUtils.isNotBlank(categorySlug);
+        if (hasCategory) {
+            sb.append("?category=").append(
+                    URLEncoder.encode(categorySlug, StandardCharsets.UTF_8));
+        }
+        if (page > 1) {
+            sb.append(hasCategory ? "&" : "?").append("page=").append(page);
+        }
+        return sb.toString();
+    }
+
+    /** 站点对外基地址（去尾斜杠，避免与以 / 开头的路径拼出双斜杠）。 */
+    private String siteBaseUrl(ServerRequest request) {
+        return Strings.CS.removeEnd(
+                externalUrlSupplier.getURL(request.exchange().getRequest()).toString(), "/");
+    }
+
+    /**
      * 读取插件设置并解析作者链接模板。
      * <ul>
      *   <li>接入互动增强开启时：优先读 hip 的 userCardLinkTemplate；插件未就绪或模板空则静默回退 BBS 模板</li>
@@ -408,23 +493,23 @@ public class BbsRouter {
      * </ul>
      */
     private Mono<BbsConfig> loadConfig() {
-        var appearance = settingFetcher.fetch("appearance", AppearanceSetting.class)
-                .defaultIfEmpty(AppearanceSetting.empty());
-        var browsing = settingFetcher.fetch("browsing", BrowsingSetting.class)
-                .defaultIfEmpty(BrowsingSetting.empty());
-        var integration = settingFetcher.fetch("integration", IntegrationSetting.class)
-                .defaultIfEmpty(new IntegrationSetting(null, null));
+        var appearance = settings.appearance();
+        var browsing = settings.browsing();
+        var integration = settings.integration();
         return Mono.zip(appearance, browsing, integration).flatMap(t -> {
             var a = t.getT1();
             var b = t.getT2();
             var integ = t.getT3();
-            var brand = a.brandOrEmpty();
-            var hero = a.heroOrEmpty();
-            var seo = a.seoOrEmpty();
-            var list = b.listOrEmpty();
-            var detail = b.detailOrEmpty();
+            var brand = a.brand();
+            var hero = a.hero();
+            var seo = a.seo();
+            var list = b.list();
+            var detail = b.detail();
+            var interaction = integ.interaction();
 
-            boolean hip = Boolean.TRUE.equals(integ.enableInteractionPlus());
+            boolean hip = Boolean.TRUE.equals(interaction.enableInteractionPlus());
+            // 列表装扮仅在接入互动增强时生效
+            boolean listDecoration = hip && Boolean.TRUE.equals(interaction.listDecoration());
             // Banner 仅在显示 Hero、选择图片模式且 URL 合法时生效
             var bannerUrl = Boolean.FALSE.equals(hero.showHero()) ? null
                     : ("image".equals(hero.heroStyle()) ? sanitizeUrl(hero.bannerImage()) : null);
@@ -460,7 +545,6 @@ public class BbsRouter {
                     StringUtils.defaultIfBlank(brand.slogan(), "").strip(),
                     !Boolean.FALSE.equals(hero.showHero()),
                     bannerUrl,
-                    !Boolean.FALSE.equals(hero.showStats()),
                     footerNotice,
                     Boolean.TRUE.equals(list.listShowExcerpt()),
                     dateFormat,
@@ -468,7 +552,12 @@ public class BbsRouter {
                     relatedStrategy,
                     !Boolean.FALSE.equals(detail.enableToc()),
                     hip,
-                    authorTpl));
+                    listDecoration,
+                    authorTpl,
+                    // 清空 = 回到默认「-」；限长防止把整段文案塞进分隔符
+                    StringUtils.left(
+                            StringUtils.defaultIfBlank(brand.titleSeparator(), "-").strip(),
+                            8)));
         });
     }
 
@@ -490,7 +579,7 @@ public class BbsRouter {
                     try {
                         var node = JSON.readTree(raw);
                         return sanitizeLinkTemplate(
-                                node.path("userCardLinkTemplate").asText(""));
+                                node.path("userCardLinkTemplate").asString(""));
                     } catch (Exception e) {
                         log.debug("解析 interaction-plus 展示配置失败，作者链接回退 BBS 模板", e);
                         return "";
@@ -505,23 +594,14 @@ public class BbsRouter {
                 .map(hipTpl -> StringUtils.isNotBlank(hipTpl) ? hipTpl : fallback);
     }
 
-    /** 前台以内联样式使用主色，仅放行合法 HEX，防样式注入。 */
+    /** 前台以内联样式使用主色：仅放行 HEX（含透明）；空或非法返回空串。 */
     private static String sanitizeColor(String color) {
-        return (color != null && color.matches("^#([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$"))
-                ? color : DEFAULT_ACCENT_COLOR;
+        return com.timxs.bbs.util.BbsColors.sanitize(color);
     }
 
     /** Logo / Banner URL 进入内联样式与 src，仅放行站内路径或 http(s)，且不含引号括号空白。 */
     private static String sanitizeUrl(String url) {
-        if (StringUtils.isBlank(url)) {
-            return null;
-        }
-        var u = url.strip();
-        if (!u.matches("[^'\"()\\s]+")) {
-            return null;
-        }
-        return (u.startsWith("/") || u.startsWith("http://") || u.startsWith("https://"))
-                ? u : null;
+        return com.timxs.bbs.util.BbsUrls.sanitize(url);
     }
 
     /**
@@ -542,115 +622,26 @@ public class BbsRouter {
         return t;
     }
 
-    /**
-     * 外观组（bbs-settings / appearance）。
-     * 结构与 formSchema 的 {@code $formkit: group} 对齐：brand / hero / seo。
-     *
-     * <p>同时保留旧版扁平字段（无 group 嵌套时 ConfigMap 直接挂顶层），
-     * {@code *OrEmpty()} 优先读嵌套 group，缺失时回退扁平字段，避免升级后前台 500。</p>
-     */
-    public record AppearanceSetting(
-            Brand brand, Hero hero, Seo seo,
-            // —— 旧版扁平字段（group 重构前）——
-            String pageTitle, String logo, String slogan, String accentColor,
-            Boolean showHero, String heroStyle, String bannerImage, Boolean showStats,
-            String footerNotice) {
-
-        static AppearanceSetting empty() {
-            return new AppearanceSetting(
-                    null, null, null,
-                    null, null, null, null,
-                    null, null, null, null,
-                    null);
-        }
-
-        public Brand brandOrEmpty() {
-            return brand != null ? brand
-                    : new Brand(pageTitle, logo, slogan, accentColor);
-        }
-
-        Hero heroOrEmpty() {
-            return hero != null ? hero
-                    : new Hero(showHero, heroStyle, bannerImage, showStats);
-        }
-
-        Seo seoOrEmpty() {
-            return seo != null ? seo : new Seo(footerNotice);
-        }
-
-        public record Brand(String pageTitle, String logo, String slogan, String accentColor) {
-        }
-
-        public record Hero(Boolean showHero, String heroStyle, String bannerImage,
-                Boolean showStats) {
-        }
-
-        /** 页脚配置（group 名仍为 seo，兼容已有 ConfigMap）。 */
-        public record Seo(String footerNotice) {
-        }
-    }
-
-    /**
-     * 浏览组（bbs-settings / browsing）。
-     * 结构与 formSchema 的 {@code $formkit: group} 对齐：list / detail / rss。
-     * 同时保留旧版扁平字段，{@code *OrEmpty()} 在 group 缺失时回退。
-     */
-    public record BrowsingSetting(
-            ListOpts list, Detail detail, Rss rss,
-            // —— 旧版扁平字段 ——
-            Integer pageSize, Boolean listShowExcerpt, String dateFormat,
-            Integer relatedPostCount, String relatedPostStrategy, Boolean enableToc,
-            Boolean enableRss, Integer rssSize) {
-
-        static BrowsingSetting empty() {
-            return new BrowsingSetting(
-                    null, null, null,
-                    null, null, null,
-                    null, null, null,
-                    null, null);
-        }
-
-        ListOpts listOrEmpty() {
-            return list != null ? list
-                    : new ListOpts(pageSize, listShowExcerpt, dateFormat);
-        }
-
-        Detail detailOrEmpty() {
-            return detail != null ? detail
-                    : new Detail(relatedPostCount, relatedPostStrategy, enableToc);
-        }
-
-        public Rss rssOrEmpty() {
-            return rss != null ? rss : new Rss(enableRss, rssSize);
-        }
-
-        public record ListOpts(Integer pageSize, Boolean listShowExcerpt, String dateFormat) {
-        }
-
-        public record Detail(Integer relatedPostCount, String relatedPostStrategy,
-                Boolean enableToc) {
-        }
-
-        public record Rss(Boolean enableRss, Integer rssSize) {
-        }
-    }
-
-    /**
-     * 集成设置组（bbs-settings / integration）：
-     * enableInteractionPlus=接入互动增强（装扮 + 作者链接优先 hip）；
-     * authorLinkTemplate=BBS 兜底作者链接（{name}=用户名，空=不跳转）。
-     */
-    public record IntegrationSetting(Boolean enableInteractionPlus, String authorLinkTemplate) {
-    }
-
     /** 解析后的有效配置（已套用默认值；authorLinkTemplate 已是最终有效模板，可为空串）。 */
     private record BbsConfig(
             String pageTitle, int pageSize,
             String accentColor, String logoUrl, String slogan,
-            boolean showHero, String bannerUrl, boolean showStats,
+            boolean showHero, String bannerUrl,
             String footerNotice,
             boolean listShowExcerpt, String dateFormat,
             int relatedPostCount, String relatedPostStrategy, boolean enableToc,
-            boolean interactionPlus, String authorLinkTemplate) {
+            boolean interactionPlus, boolean listDecoration, String authorLinkTemplate,
+            String titleSeparator) {
+
+        /**
+         * 浏览器标题：按顺序拼接非空段，空段跳过，只剩一段时不出现分隔符。
+         * 分隔符两侧固定补空格——存的是「-」这类裸符号，拼出来才是「BBS 社区 - 副标题」。
+         */
+        String documentTitle(String... segments) {
+            return java.util.Arrays.stream(segments)
+                    .filter(StringUtils::isNotBlank)
+                    .map(String::strip)
+                    .collect(java.util.stream.Collectors.joining(" " + titleSeparator + " "));
+        }
     }
 }

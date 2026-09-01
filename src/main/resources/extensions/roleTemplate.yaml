@@ -1,4 +1,11 @@
-# BBS 社区查看：Console 只读（帖子/分类列表与详情），对齐官方"查看/管理"两级模板
+# BBS 社区后台查看：Console 只读（帖子/分类列表与详情），对齐官方"查看/管理"两级模板。
+# 显示名特意点出「后台」：前台浏览由 bbs-public-read 自动聚合给所有访客（含匿名），
+# 不需要授予任何角色；若站长把本角色误读成「允许浏览社区」授给普通用户，
+# 那人就能进管理后台看到未发布 / 待审核 / 回收站里的内容。
+#
+# 不授 bbs.timxs.com/bbsposts 与 content.halo.run/snapshots 的 get/list。帖子和快照读取
+# 一律走 console.api：列表已按管辖过滤、详情校验 subjectRef，避免分区版主越权读取
+# 其他分类的未发布 head。分类 CRUD 只读留给分类编辑回填 / 别名预检。
 apiVersion: v1alpha1
 kind: Role
 metadata:
@@ -7,19 +14,26 @@ metadata:
     halo.run/role-template: "true"
   annotations:
     rbac.authorization.halo.run/module: "BBS 社区"
-    rbac.authorization.halo.run/display-name: "BBS 社区查看"
+    rbac.authorization.halo.run/display-name: "BBS 社区后台查看"
     rbac.authorization.halo.run/ui-permissions: |
       ["plugin:bbs:view"]
 rules:
   - apiGroups: ["bbs.timxs.com"]
-    resources: ["bbsposts", "bbscategories"]
+    resources: ["bbscategories"]
     verbs: ["get", "list"]
   - apiGroups: ["console.api.bbs.timxs.com"]
     resources: ["*"]
     verbs: ["get", "list"]
 ---
 # BBS 社区版主：帖子管理（审核 / 锁定 / 置顶 / 标记已解决 / 删帖），
-# 不含分类管理（bbs.timxs.com 组无写权限）与插件设置；依赖查看角色补足只读能力
+# 全部经 console.api 子资源走服务层（含正文净化）。不授予 bbs.timxs.com
+# 组的帖子/快照读写——CRUD PATCH 可篡改 Snapshot 指针或绕过正文净化。
+# 不含分类管理与插件设置。
+#
+# 不含 bbsposts/permanently（彻底删除）：审核工作的输出都是可逆的（驳回 / 下架 /
+# 移入回收站），回收站就是误判的后悔药，把它的钥匙也给审核者等于取消这层保护。
+# 对齐 Discourse——其 can_permanently_delete_topic? 要求 is_admin?，版主不可，
+# 且另有站点开关与「软删者本人冷却期内不得永久删」的四眼限制
 apiVersion: v1alpha1
 kind: Role
 metadata:
@@ -34,7 +48,10 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: |
       ["plugin:bbs:view", "plugin:bbs:moderate"]
 rules:
-  # Halo RBAC 不支持 "resource/*" 通配（仅 "*"、精确 "res/sub"、"*/sub"），子资源须显式枚举
+  # Halo RBAC 不支持 "resource/*" 通配（仅 "*"、精确 "res/sub"、"*/sub"），子资源须显式枚举。
+  # 快照子资源（content / revert-content / snapshot）与帖子共用同一组 verbs：不设独立的
+  # 快照角色，也没有单独的快照开关——能管这篇帖子就能管它的全部历史版本，对齐官方
+  # role-template-post.yaml 把 posts/content、posts/revert-content 并进帖子规则的写法。
   - apiGroups: ["console.api.bbs.timxs.com"]
     resources:
       - "bbsposts"
@@ -48,11 +65,17 @@ rules:
       - "bbsposts/unlock"
       - "bbsposts/solve"
       - "bbsposts/unsolve"
+      - "bbsposts/restore"
+      - "bbsposts/snapshot"
+      - "bbsposts/content"
+      - "bbsposts/head-content"
+      - "bbsposts/release-content"
+      - "bbsposts/revert-content"
+      # 审核记录与评论管理子资源：bbs-view 的 "*" 通配已覆盖读，这里显式枚举是
+      # 收窄通配时的护栏（与上面快照子资源同理，细粒度角色判定时只认枚举项）。
+      - "bbsposts/moderation-records"
+      - "bbsposts/comments"
     verbs: ["*"]
-  # 设置弹窗 / 批量设分类走 CRUD PATCH（仅帖子，不含分类写权限）
-  - apiGroups: ["bbs.timxs.com"]
-    resources: ["bbsposts"]
-    verbs: ["update", "patch", "delete"]
 ---
 # BBS 社区管理：版主能力 + 分类管理 + 全部管理接口（依赖查看与版主角色）
 apiVersion: v1alpha1
@@ -70,7 +93,7 @@ metadata:
       ["plugin:bbs:view", "plugin:bbs:moderate", "plugin:bbs:manage"]
 rules:
   - apiGroups: ["bbs.timxs.com"]
-    resources: ["bbsposts", "bbscategories"]
+    resources: ["bbscategories"]
     verbs: ["*"]
   - apiGroups: ["console.api.bbs.timxs.com"]
     resources: ["*"]
@@ -92,11 +115,26 @@ metadata:
 rules:
   - apiGroups: ["uc.api.bbs.timxs.com"]
     resources: ["bbsposts"]
-    verbs: ["create", "get", "list", "update", "delete"]
+    verbs: ["create", "get", "update", "delete"]
   # 问答帖已解决切换是子资源路径（/bbsposts/{name}/solve|unsolve），需单独授权
   - apiGroups: ["uc.api.bbs.timxs.com"]
-    resources: ["bbsposts/solve", "bbsposts/unsolve"]
+    resources: ["bbsposts/submit", "bbsposts/solve", "bbsposts/unsolve"]
     verbs: ["update"]
+  # 快照没有独立权限：能读这篇帖子就能读它的全部历史版本，能改就能恢复 / 删除。
+  # 但 Halo RBAC 没有「父资源自动覆盖子资源」机制，规则仍须逐个子资源枚举，
+  # 形态对齐官方 role-template-post.yaml 的读侧 / 写侧两条规则。
+  # 正文与快照一律经归属校验后的 UC 聚合接口读写，不直授核心 content.halo.run GVK。
+  - apiGroups: ["uc.api.bbs.timxs.com"]
+    resources:
+      - "bbsposts/snapshot"
+      - "bbsposts/content"
+      - "bbsposts/head-content"
+      - "bbsposts/release-content"
+      - "bbsposts/moderation-records"
+    verbs: ["get", "list"]
+  - apiGroups: ["uc.api.bbs.timxs.com"]
+    resources: ["bbsposts/content", "bbsposts/revert-content"]
+    verbs: ["update", "delete"]
 ---
 # 公开读：前台浏览已发布帖子/公告/分类（聚合到匿名 + 登录用户）
 apiVersion: v1alpha1
@@ -112,9 +150,5 @@ metadata:
     rbac.authorization.halo.run/module: "BBS 社区"
 rules:
   - apiGroups: ["api.bbs.timxs.com"]
-    resources: ["posts", "announcements", "categories"]
+    resources: ["posts", "announcements", "categories", "posts/comments", "comments/replies"]
     verbs: ["get", "list"]
-  # 帖子评论（Halo 评论体系子资源）：实际能否匿名评论仍由「系统设置 → 评论」控制
-  - apiGroups: ["bbs.timxs.com"]
-    resources: ["bbsposts/comments"]
-    verbs: ["create", "list"]

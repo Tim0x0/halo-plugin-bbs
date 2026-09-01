@@ -2,6 +2,7 @@ package com.timxs.bbs.integration;
 
 import com.timxs.bbs.event.BbsPostChangedEvent;
 import com.timxs.bbs.finder.BbsFinder;
+import com.timxs.bbs.service.BbsSettings;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.ApplicationEventPublisher;
@@ -10,7 +11,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import run.halo.app.infra.ExternalUrlSupplier;
-import run.halo.app.plugin.ReactiveSettingFetcher;
 import run.halo.feed.CacheClearRule;
 import run.halo.feed.RssCacheClearRequested;
 
@@ -34,7 +34,7 @@ import run.halo.feed.RssCacheClearRequested;
 public class BbsFeedIntegration {
 
     private final BbsFinder bbsFinder;
-    private final ReactiveSettingFetcher settingFetcher;
+    private final BbsSettings settings;
     private final ExternalUrlSupplier externalUrlSupplier;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -44,13 +44,13 @@ public class BbsFeedIntegration {
      */
     @Bean
     BbsRssRouteItem bbsRssRouteItem() {
-        return new BbsRssRouteItem(bbsFinder, settingFetcher, externalUrlSupplier);
+        return new BbsRssRouteItem(bbsFinder, settings, externalUrlSupplier);
     }
 
     /** 一级分类 RSS 订阅源（含子分类内容），{@code /feed/bbs/categories/{slug}.xml}。 */
     @Bean
     BbsCategoryRssRouteItem bbsCategoryRssRouteItem() {
-        return new BbsCategoryRssRouteItem(bbsFinder, settingFetcher, externalUrlSupplier);
+        return new BbsCategoryRssRouteItem(bbsFinder, settings, externalUrlSupplier);
     }
 
     /**

@@ -1,6 +1,6 @@
-# plugin-feed RSS 订阅源扩展点声明（必须）：
-# 来源插件 id 由系统按本 ED 上 Halo 自动打的 plugin.halo.run/plugin-name label 盖章，
-# 缺失本文件时 BbsRssRouteItem 贡献的 RSS 源会被 plugin-feed 整体忽略。
+# plugin-feed 扩展点声明：给 ExtensionGetter / Console 展示用。
+# 实际 RSS 源由 BbsFeedIntegration 在 plugin-feed 在场时以 @Bean 注册
+# （全站 /feed/bbs/posts.xml + 分类 /feed/bbs/categories/{slug}.xml）。
 apiVersion: plugin.halo.run/v1alpha1
 kind: ExtensionDefinition
 metadata:

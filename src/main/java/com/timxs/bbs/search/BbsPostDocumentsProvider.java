@@ -1,7 +1,13 @@
 package com.timxs.bbs.search;
 
+import static run.halo.app.extension.index.query.Queries.and;
+import static run.halo.app.extension.index.query.Queries.equal;
+
 import com.timxs.bbs.extension.BbsPost;
+import com.timxs.bbs.service.BbsPostContentService;
 import com.timxs.bbs.service.HtmlSanitizer;
+import com.timxs.bbs.util.BbsExcerpts;
+import com.timxs.bbs.util.BbsUrls;
 import java.util.List;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
@@ -27,16 +33,27 @@ public class BbsPostDocumentsProvider implements HaloDocumentsProvider {
     public static final String TYPE = "bbspost.bbs.timxs.com";
 
     private final ReactiveExtensionClient client;
+    private final BbsPostContentService contentService;
 
-    public BbsPostDocumentsProvider(ReactiveExtensionClient client) {
+    public BbsPostDocumentsProvider(ReactiveExtensionClient client,
+            BbsPostContentService contentService) {
         this.client = client;
+        this.contentService = contentService;
     }
 
     @Override
     public Flux<HaloDocument> fetchAll() {
-        return client.listAll(BbsPost.class, new ListOptions(), Sort.unsorted())
+        // 回收站里的帖子不进索引。增量路径由 BbsPostReconciler 移出索引，但全量重建
+        // （重启 / 手动重建）走这里——漏了过滤会把已删除的帖子重新灌回搜索结果
+        var options = ListOptions.builder()
+                .fieldQuery(and(
+                        equal("spec.deleted", false),
+                        equal("spec.phase", BbsPost.Phase.PUBLISHED.name())))
+                .build();
+        return client.listAll(BbsPost.class, options, Sort.unsorted())
                 .filter(post -> post.getMetadata().getDeletionTimestamp() == null)
-                .map(BbsPostDocumentsProvider::convert);
+                .flatMapSequential(post -> contentService.getReleaseContent(post)
+                        .map(content -> convert(post, content.getContent())));
     }
 
     @Override
@@ -49,16 +66,17 @@ public class BbsPostDocumentsProvider implements HaloDocumentsProvider {
         return TYPE + "-" + metadataName;
     }
 
-    /** 帖子 → 搜索文档：正文转纯文本；仅已发布帖子对外可见。 */
-    public static HaloDocument convert(BbsPost post) {
+    /** 帖子 → 搜索文档：正文转纯文本；仅已发布且未删除的帖子对外可见。 */
+    public static HaloDocument convert(BbsPost post, String content) {
         var spec = post.getSpec();
-        boolean published = spec.getPhase() == BbsPost.Phase.PUBLISHED;
+        boolean recycled = Boolean.TRUE.equals(spec.getDeleted());
+        boolean published = spec.getPhase() == BbsPost.Phase.PUBLISHED && !recycled;
         var doc = new HaloDocument();
         doc.setId(docId(post.getMetadata().getName()));
         doc.setMetadataName(post.getMetadata().getName());
         doc.setTitle(spec.getTitle());
-        doc.setDescription(spec.getExcerpt());
-        doc.setContent(HtmlSanitizer.plainText(spec.getContent()));
+        doc.setDescription(BbsExcerpts.resolve(spec, content));
+        doc.setContent(HtmlSanitizer.plainText(content));
         doc.setOwnerName(spec.getOwner());
         doc.setCategories(spec.getCategoryName() == null
                 ? null : List.of(spec.getCategoryName()));
@@ -68,10 +86,11 @@ public class BbsPostDocumentsProvider implements HaloDocumentsProvider {
                 : spec.getPublishTime() != null
                         ? spec.getPublishTime()
                         : post.getMetadata().getCreationTimestamp());
-        doc.setPermalink("/bbs/post/" + spec.getSlug());
+        doc.setPermalink(BbsUrls.postPermalink(spec.getSlug()));
         doc.setType(TYPE);
         doc.setPublished(published);
-        doc.setRecycled(false);
+        // Halo 的搜索框架原生支持回收站语义：如实上报，万一文档留在索引里也不会被暴露
+        doc.setRecycled(recycled);
         doc.setExposed(published);
         return doc;
     }

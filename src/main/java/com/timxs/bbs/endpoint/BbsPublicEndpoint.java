@@ -1,18 +1,25 @@
 package com.timxs.bbs.endpoint;
 
+import static com.timxs.bbs.util.BbsEndpointParams.nameParam;
+import static com.timxs.bbs.util.BbsEndpointParams.pageParam;
+import static com.timxs.bbs.util.BbsEndpointParams.queryParam;
+import static com.timxs.bbs.util.BbsEndpointParams.sizeParam;
+import static com.timxs.bbs.util.BbsEndpointParams.slugParam;
 import static org.springdoc.core.fn.builders.apiresponse.Builder.responseBuilder;
-import static org.springdoc.core.fn.builders.parameter.Builder.parameterBuilder;
 
 import com.timxs.bbs.query.BbsQueryService;
+import com.timxs.bbs.util.BbsPageRequests;
 import com.timxs.bbs.vo.BbsPostVo;
 import com.timxs.bbs.vo.CategoryVo;
-import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import com.timxs.bbs.vo.RoCommentVo;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.webflux.core.fn.SpringdocRouteBuilder;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
@@ -32,7 +39,14 @@ import run.halo.app.extension.ListResult;
 public class BbsPublicEndpoint implements CustomEndpoint {
 
     private static final String TAG = "BbsV1alpha1Public";
-    private static final int MAX_PAGE_SIZE = 50;
+
+    /**
+     * 只读评论列表里每条评论预取的楼中楼条数。
+     *
+     * <p>刻意不做成设置项：只读评论区仅锁定帖可见，属低频场景，
+     * 多一个配置项不值当。超出的回复由前端点「展开」再走 replies 分页。</p>
+     */
+    private static final int RO_REPLY_PREVIEW = 3;
 
     private final BbsQueryService queryService;
 
@@ -43,20 +57,19 @@ public class BbsPublicEndpoint implements CustomEndpoint {
                         .operationId("ListBbsPostsPublic").tag(TAG)
                         .description("已发布内容分页（置顶按作用域浮顶；可按分类 name/slug、"
                                 + "关键词、类型过滤；sort=active|latest|hot，默认最后活跃）")
-                        .parameter(queryParam("page", Integer.class))
-                        .parameter(queryParam("size", Integer.class))
-                        .parameter(queryParam("categoryName", String.class))
-                        .parameter(queryParam("categorySlug", String.class))
-                        .parameter(queryParam("keyword", String.class))
-                        .parameter(queryParam("sort", String.class))
-                        .parameter(queryParam("type", String.class))
+                        .parameter(pageParam())
+                        .parameter(sizeParam())
+                        .parameter(queryParam("categoryName"))
+                        .parameter(queryParam("categorySlug"))
+                        .parameter(queryParam("keyword"))
+                        .parameter(queryParam("sort"))
+                        .parameter(queryParam("type"))
                         .response(responseBuilder().implementation(
                                 ListResult.generateGenericClass(BbsPostVo.class))))
                 .GET("/posts/{slug}", this::getPost, builder -> builder
                         .operationId("GetBbsPostPublic").tag(TAG)
                         .description("按 slug 取已发布帖子详情（含净化后的正文 HTML）")
-                        .parameter(parameterBuilder().name("slug").in(ParameterIn.PATH)
-                                .required(true).implementation(String.class))
+                        .parameter(slugParam())
                         .response(responseBuilder().implementation(BbsPostVo.class)))
                 .GET("/announcements", this::listAnnouncements, builder -> builder
                         .operationId("ListBbsAnnouncementsPublic").tag(TAG)
@@ -67,6 +80,23 @@ public class BbsPublicEndpoint implements CustomEndpoint {
                         .operationId("ListBbsCategoriesPublic").tag(TAG)
                         .description("启用中的分类（priority 升序，含已发布帖子数）")
                         .response(responseBuilder().implementationArray(CategoryVo.class)))
+                .GET("/posts/{name}/comments", this::listRoComments, builder -> builder
+                        .operationId("ListBbsRoCommentsPublic").tag(TAG)
+                        .description("锁定帖的只读评论（owner.name 仅 User kind 返回，供装扮；"
+                                + "Email kind 不返回 name 防 email 泄露）")
+                        .parameter(nameParam())
+                        .parameter(pageParam())
+                        .parameter(sizeParam())
+                        .response(responseBuilder().implementation(
+                                ListResult.generateGenericClass(RoCommentVo.class))))
+                .GET("/comments/{name}/replies", this::listRoReplies, builder -> builder
+                        .operationId("ListBbsRoRepliesPublic").tag(TAG)
+                        .description("某评论的只读楼中楼回复（同 listRoComments 装扮 + 批量）")
+                        .parameter(nameParam())
+                        .parameter(pageParam())
+                        .parameter(sizeParam())
+                        .response(responseBuilder().implementation(
+                                ListResult.generateGenericClass(RoCommentVo.class))))
                 .build();
     }
 
@@ -76,9 +106,9 @@ public class BbsPublicEndpoint implements CustomEndpoint {
     }
 
     private Mono<ServerResponse> listPosts(ServerRequest request) {
-        int size = Math.min(intParam(request, "size", 10), MAX_PAGE_SIZE);
-        return queryService.listPublicPosts(
-                        intParam(request, "page", 1),
+        int size = BbsPageRequests.size(request, 10, BbsPageRequests.MAX_PUBLIC);
+        return queryService.listPublicPostsOrNotFound(
+                        BbsPageRequests.page(request, 1),
                         size,
                         request.queryParam("categoryName").orElse(null),
                         request.queryParam("categorySlug").orElse(null),
@@ -91,11 +121,14 @@ public class BbsPublicEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> getPost(ServerRequest request) {
         return queryService.getPublishedBySlug(request.pathVariable("slug"))
                 .flatMap(vo -> ServerResponse.ok().bodyValue(vo))
-                .switchIfEmpty(ServerResponse.notFound().build());
+                // API 语义的 404：带原因，消费方能读到 ProblemDetail
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "帖子不存在")));
     }
 
     private Mono<ServerResponse> listAnnouncements(ServerRequest request) {
-        int limit = Math.min(intParam(request, "limit", 5), MAX_PAGE_SIZE);
+        int limit = Math.min(BbsPageRequests.positiveInt(request, "limit", 5),
+                BbsPageRequests.MAX_PUBLIC);
         return queryService.listAnnouncements(limit)
                 .collectList()
                 .flatMap(list -> ServerResponse.ok().bodyValue(list));
@@ -107,16 +140,22 @@ public class BbsPublicEndpoint implements CustomEndpoint {
                 .flatMap(list -> ServerResponse.ok().bodyValue(list));
     }
 
-    private static int intParam(ServerRequest request, String name, int defaultValue) {
-        return request.queryParam(name)
-                .filter(s -> s.matches("\\d+"))
-                .map(Integer::parseInt)
-                .orElse(defaultValue);
+    private Mono<ServerResponse> listRoComments(ServerRequest request) {
+        int size = BbsPageRequests.size(request, 20, BbsPageRequests.MAX_PUBLIC);
+        return queryService.listRoComments(
+                        request.pathVariable("name"),
+                        BbsPageRequests.page(request, 1),
+                        size,
+                        RO_REPLY_PREVIEW)
+                .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 
-    private static org.springdoc.core.fn.builders.parameter.Builder queryParam(String name,
-            Class<?> type) {
-        return parameterBuilder().name(name).in(ParameterIn.QUERY)
-                .required(false).implementation(type);
+    private Mono<ServerResponse> listRoReplies(ServerRequest request) {
+        int size = BbsPageRequests.size(request, 50, BbsPageRequests.MAX_PUBLIC);
+        return queryService.listRoReplies(
+                        request.pathVariable("name"),
+                        BbsPageRequests.page(request, 1),
+                        size)
+                .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 }

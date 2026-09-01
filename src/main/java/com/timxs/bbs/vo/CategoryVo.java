@@ -1,6 +1,10 @@
 package com.timxs.bbs.vo;
 
 import com.timxs.bbs.extension.BbsCategory;
+import com.timxs.bbs.service.HtmlSanitizer;
+import com.timxs.bbs.util.BbsColors;
+import com.timxs.bbs.util.BbsUrls;
+import java.time.Instant;
 import java.util.List;
 import lombok.Builder;
 import lombok.Data;
@@ -34,17 +38,20 @@ public class CategoryVo {
     /** Iconify 图标名（如 mdi:bullhorn）；可空 */
     private String icon;
 
-    /** 图标内联 SVG（离线渲染用，currentColor 填充） */
+    /** 图标内联 SVG（离线渲染用；选色已烤进 fill，未选色为 currentColor 随文字色） */
     private String iconSvg;
 
-    /** 分类色 HEX（来自 Iconify 选色）；无图标时可空 */
+    /** 分类色 HEX（含透明；空=不上色） */
     private String color;
 
     /** 父分类的 metadata.name；空=一级分类 */
     private String parentName;
 
-    /** 封面图 URL（分类页 hero 背景；子分类已继承父分类封面，可空=用分类色渐变兜底） */
+    /** 封面图 URL（分类页 hero 背景；子分类已继承父分类封面，可空=用分类色，分类色也空则中性底） */
     private String cover;
+
+    /** 前台访问地址（调和器写入 status.permalink；缺省按 slug 拼） */
+    private String permalink;
 
     /** 父分类摘要（子分类才有；无嵌套 parent/children）——列表双徽章渲染用 */
     private CategoryVo parent;
@@ -56,29 +63,47 @@ public class CategoryVo {
 
     private Boolean enabled;
 
+    /** 本分类树（本级 + 子分类）下置顶帖是否出现在首页顶部；仅一级分类有意义 */
+    private Boolean pinToHome;
+
     /** 本分类直属的已发布帖子数（含公告） */
     private Long postCount;
 
     /** 含子分类的已发布帖子总数（一级=自身+子分类合计；子分类=同 postCount） */
     private Long totalPostCount;
 
+    /** 创建时间（metadata.creationTimestamp；Console 分类列表对齐官方显示绝对时间） */
+    private Instant creationTimestamp;
+
     /** 由分类扩展构建（postCount / parent / children / cover 继承由调用方另行填充）。 */
     public static CategoryVo from(BbsCategory category) {
         var spec = category.getSpec();
+        var metadata = category.getMetadata();
         return CategoryVo.builder()
-                .name(category.getMetadata().getName())
+                .name(metadata.getName())
                 .displayName(spec.getDisplayName())
                 .slug(spec.getSlug())
                 .description(spec.getDescription())
                 .icon(spec.getIcon())
-                .iconSvg(spec.getIconSvg())
-                .color(spec.getColor())
+                .iconSvg(HtmlSanitizer.cleanSvg(spec.getIconSvg()))
+                .color(BbsColors.sanitize(spec.getColor()))
                 .parentName(spec.getParentName())
-                .cover(spec.getCover())
+                .cover(BbsUrls.sanitize(spec.getCover()))
+                .permalink(permalinkOf(category))
                 .priority(spec.getPriority() == null ? 0 : spec.getPriority())
                 .enabled(!Boolean.FALSE.equals(spec.getEnabled()))
+                .pinToHome(Boolean.TRUE.equals(spec.getPinToHome()))
                 .postCount(0L)
                 .totalPostCount(0L)
+                .creationTimestamp(metadata.getCreationTimestamp())
                 .build();
+    }
+
+    private static String permalinkOf(BbsCategory category) {
+        var status = category.getStatus();
+        if (status != null && org.apache.commons.lang3.StringUtils.isNotBlank(status.getPermalink())) {
+            return status.getPermalink();
+        }
+        return BbsUrls.categoryPermalink(category.getSpec().getSlug());
     }
 }

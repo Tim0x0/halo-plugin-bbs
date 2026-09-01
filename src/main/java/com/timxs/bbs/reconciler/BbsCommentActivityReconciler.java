@@ -31,17 +31,16 @@ public class BbsCommentActivityReconciler implements Reconciler<Reconciler.Reque
             GroupVersionKind.fromExtension(BbsPost.class);
 
     private final ExtensionClient client;
+    private final BbsCountService countService;
 
-    public BbsCommentActivityReconciler(ExtensionClient client) {
+    public BbsCommentActivityReconciler(ExtensionClient client, BbsCountService countService) {
         this.client = client;
+        this.countService = countService;
     }
 
     @Override
     public Result reconcile(Request request) {
         client.fetch(Comment.class, request.name()).ifPresent(comment -> {
-            if (ExtensionUtil.isDeleted(comment)) {
-                return;
-            }
             var spec = comment.getSpec();
             var ref = spec.getSubjectRef();
             if (ref == null
@@ -49,31 +48,19 @@ public class BbsCommentActivityReconciler implements Reconciler<Reconciler.Reque
                     || !Objects.equals(POST_GVK.kind(), ref.getKind())) {
                 return;
             }
-            if (!Boolean.TRUE.equals(spec.getApproved())
-                    || Boolean.TRUE.equals(spec.getHidden())) {
-                return;
+            // 只在可见的新评论上顶活跃时间；删除 / 撤回审核 / 隐藏都不回退时间，
+            // 但都要重算计数——两者合并成对帖子的一次写入
+            Instant activityTime = null;
+            if (!ExtensionUtil.isDeleted(comment)
+                    && Boolean.TRUE.equals(spec.getApproved())
+                    && !Boolean.TRUE.equals(spec.getHidden())) {
+                activityTime = spec.getCreationTime() != null
+                        ? spec.getCreationTime()
+                        : comment.getMetadata().getCreationTimestamp();
             }
-            var activityTime = spec.getCreationTime() != null
-                    ? spec.getCreationTime()
-                    : comment.getMetadata().getCreationTimestamp();
-            bump(ref.getName(), activityTime);
+            countService.syncPostComment(ref.getName(), activityTime);
         });
         return Result.doNotRetry();
-    }
-
-    /** 只前进不后退 + 幂等：活跃时间已不早于评论时间则不写，避免重复调和空转。 */
-    private void bump(String postName, Instant activityTime) {
-        if (activityTime == null) {
-            return;
-        }
-        client.fetch(BbsPost.class, postName).ifPresent(post -> {
-            var current = post.getSpec().getLastActivityTime();
-            if (current != null && !current.isBefore(activityTime)) {
-                return;
-            }
-            post.getSpec().setLastActivityTime(activityTime);
-            client.update(post);
-        });
     }
 
     @Override

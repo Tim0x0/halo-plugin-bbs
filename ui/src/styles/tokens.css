@@ -8,6 +8,7 @@
   --bbs-accent-bg: rgba(99, 102, 241, 0.1);
 
   --bbs-border: #eaecf0;
+  --bbs-bg-surface: #fff;
   --bbs-bg-soft: #f9fafb;
   --bbs-bg-hover: #f9fafb;
   --bbs-bg-selected: #f3f4f6;
@@ -28,4 +29,206 @@
   --bbs-radius: 4px;
   --bbs-radius-lg: 10px;
   --bbs-transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+ * 面板型下拉的浮层修正。
+ *
+ * @halo-dev/components 的 dropdown 样式给 .v-popper__inner 上了 6px 内边距
+ * （菜单项场景需要），但面板型内容（搜索框要贴边、列表要整宽）会因此内缩一圈、
+ * 四角露白边。Halo 自己的每个面板下拉都显式抵消它（CategoryFilterDropdown 用
+ * Tailwind 的 [&_.v-popper__inner]:!p-0，CategorySelect / TagSelect /
+ * MenuItemParentSelect 用同款 !important 规则）。
+ *
+ * 必须是全局样式：浮层被 teleport 到 body，scoped 选择器够不着。
+ */
+.bbs-panel-popper .v-popper__inner {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.bbs-panel-popper .v-popper__arrow-container {
+  display: none;
+}
+
+/*
+ * 多页面共用的展示层样式（原为各组件 scoped 副本，逐字相同，集中维护）。
+ * 插件 UI 与 Halo 后台 / 其它插件同页共存，全局类一律带 bbs- 前缀防碰撞。
+ */
+
+/* —— 页面骨架：页头图标与内容区外边距（帖子 / 我的帖子 / 分类列表） —— */
+.bbs-header-icon {
+  margin-right: 0.5rem;
+  align-self: center;
+}
+
+.bbs-page-body {
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  .bbs-page-body {
+    margin: 1rem;
+  }
+}
+
+/* —— 列表工具条的刷新按钮与行内时间 —— */
+.bbs-refresh-btn {
+  display: flex;
+  cursor: pointer;
+  align-items: center;
+  border-radius: var(--bbs-radius);
+  padding: 0.25rem;
+  transition: var(--bbs-transition);
+}
+
+.bbs-refresh-btn:hover {
+  background: var(--bbs-bg-selected);
+}
+
+.bbs-refresh-btn__icon {
+  height: 1rem;
+  width: 1rem;
+  color: var(--bbs-text-muted);
+}
+
+.bbs-refresh-btn__icon--spin {
+  animation: bbs-spin 1s linear infinite;
+  color: var(--bbs-text);
+}
+
+@keyframes bbs-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bbs-entity-time {
+  font-size: 0.75rem;
+  color: var(--bbs-text-muted);
+}
+
+/* —— 设置表单分区布局（帖子设置 / 分类编辑弹窗，对齐官方文章设置弹窗） —— */
+.bbs-setting-grid {
+  display: block;
+}
+
+.bbs-setting-grid + .bbs-setting-grid {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--bbs-border);
+  padding-top: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .bbs-setting-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+}
+
+.bbs-setting-grid__aside {
+  position: sticky;
+  top: 0;
+}
+
+.bbs-setting-grid__section {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--bbs-text);
+}
+
+.bbs-setting-grid__main {
+  margin-top: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .bbs-setting-grid__main {
+    grid-column: span 3 / span 3;
+    margin-top: 0;
+  }
+}
+
+.bbs-setting-grid__main > * + * {
+  border-top: 1px solid var(--bbs-border);
+}
+
+/* 别名 / 图标旁的「重新生成」按钮 */
+.bbs-slug-refresh {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  padding: 0 0.75rem;
+  border-left: 1px solid var(--bbs-border);
+  cursor: pointer;
+  transition: var(--bbs-transition);
+}
+
+.bbs-slug-refresh:hover {
+  background: var(--bbs-bg-hover);
+}
+
+.bbs-slug-refresh__icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--bbs-text-muted);
+}
+
+.bbs-slug-refresh:hover .bbs-slug-refresh__icon {
+  color: var(--bbs-text);
+}
+
+/* —— 列表筛选下拉（分类 / 作者）——
+   触发器色值逐字对齐官方 FilterDropdown：常态 / 选中均为 gray-700（#374151），
+   hover 转黑，选中加粗。不用更浅的灰，避免与相邻的状态 / 类型 / 排序
+   触发器（官方全局组件）产生色差 */
+.bbs-filter-trigger {
+  display: flex;
+  cursor: pointer;
+  user-select: none;
+  align-items: center;
+  gap: 0.125rem;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.bbs-filter-trigger:hover {
+  color: #000;
+}
+
+.bbs-filter-trigger--active {
+  font-weight: 600;
+  color: #374151;
+}
+
+/* 能滚动但不显示滚动条（对齐编辑器侧栏的观感） */
+.bbs-filter-panel {
+  height: 24rem;
+  width: 20rem;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.bbs-filter-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.bbs-filter-panel__search {
+  border-bottom: 1px solid var(--bbs-border, #f3f4f6);
+  background: #fff;
+  padding: 1rem;
+}
+
+/* —— 编辑器加载 / 失败占位 —— */
+.bbs-editor-loading {
+  display: flex;
+  min-height: 12rem;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.75rem;
+  color: var(--bbs-text-muted);
 }

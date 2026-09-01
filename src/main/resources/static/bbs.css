@@ -1,22 +1,25 @@
 /* ============================================================
-   BBS 社区前台样式 v4 —— 对齐 Flarum
+   BBS 社区前台样式 —— 对齐 Flarum
    结构：白色顶栏（头像下拉菜单）+ 品牌色 Hero / 全页白底无卡片 /
    列表：单行标题 + 分类 chip + 作者时间行 + 右列（状态圆徽标紧挨评论数）/
    帖子页：Hero 承载徽标+分类+标题，楼主为第一楼，评论组件区融入同一流 /
    页脚：声明 + © 站点名 + Powered by。
-   设计定稿见 .dve/preview-flarum.html（v6）。
    ============================================================ */
 
 :root {
-  --b-accent: #4d698e;
-  --b-accent-dark: #3d5573;
+  /* --b-accent 由模板在站长设了主题色时写入；清空则不设 */
   --b-bg: #ffffff;
   --b-line: #e8ecf1;
   --b-hover: #f0f2f5;
+  /* 比 --b-hover 淡一档的「陷入」底色，目前用于只读评论的楼中楼块。
+     刻意另起一档而不复用 --b-hover：行内代码底（.prose :not(pre) > code）
+     就是 --b-hover，同色会把回复里的代码整块吃掉；且锁定说明条
+     (.bbs-cmts__closed) 也是 --b-hover 圆角块，同款灰块会撞成同一种语义 */
+  --b-sunken: #f7f8fa;
   --b-text: #111111;
   --b-text-2: #667380;
   --b-text-3: #9aa4ae;
-  /* 状态徽标语义色（写死，不暴露给设置项，spec D3）：
+  /* 状态徽标语义色（固定语义色，不暴露为设置项）：
      公告=琥珀 / 置顶=主题色 / 问答=蓝 / 已解决=绿 / 锁定=中性灰 */
   --b-amber: #d97706;
   --b-blue: #2563eb;
@@ -30,6 +33,7 @@
     --b-bg: #17191d;
     --b-line: #2a2e35;
     --b-hover: #22262c;
+    --b-sunken: #1c2025;
     --b-text: #eceef1;
     --b-text-2: #a8b0ba;
     --b-text-3: #666e79;
@@ -70,8 +74,8 @@ button {
 .bbs-hd {
   position: sticky;
   top: 0;
-  /* 高于 hip-user-card 弹卡（z-70），避免滚动时弹卡盖住顶栏；
-     低于全屏灯箱（z-100），灯箱打开时仍盖住顶栏 */
+  /* 低于全屏灯箱（z-100），灯箱打开时仍盖住顶栏。
+     hip-user-card 已走 popover top layer，不再跟顶栏抢层叠 */
   z-index: 90;
   background: var(--b-bg);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -194,7 +198,7 @@ button {
   gap: 10px;
   width: 100%;
   padding: 8px 12px;
-  border-radius: 5px;
+  border-radius: 6px;
   color: var(--b-text-2);
   font-size: 13.5px;
   text-align: left;
@@ -240,7 +244,8 @@ button {
 .bbs-me__ava--letter {
   display: grid;
   place-items: center;
-  background: var(--b-accent);
+  /* 默认匿名灰；有用户时由行内 background（显示名哈希）盖掉 */
+  background: #94a3b8;
   color: #fff;
   font-size: 15px;
   font-weight: 700;
@@ -280,7 +285,7 @@ button {
 }
 
 .bbs-me__login:hover {
-  background: var(--b-accent-dark);
+  background: color-mix(in srgb, var(--b-accent) 82%, #000);
 }
 
 /* ---------------- Hero（品牌色 / 图片 Banner） ---------------- */
@@ -300,14 +305,8 @@ button {
 
 .bbs-hero p {
   margin: 8px 0 0;
-  font-size: 14px;
+  font-size: 15px;
   color: rgba(255, 255, 255, 0.8);
-}
-
-.bbs-hero__stats {
-  margin-top: 4px;
-  font-size: 12.5px;
-  color: rgba(255, 255, 255, 0.6);
 }
 
 .bbs-hero--img {
@@ -345,6 +344,10 @@ button {
   flex: none;
   position: sticky;
   top: 76px;
+  /* 分类多时侧栏会高过视口，sticky 随之失效（滚出屏幕后回不来）。
+     限高到视口剩余空间并自行滚动；92px = top 76px + 底部留白 16px */
+  max-height: calc(100vh - 92px);
+  overflow-y: auto;
 }
 
 .bbs-main {
@@ -352,22 +355,25 @@ button {
   min-width: 0;
 }
 
+/* 主按钮（发帖 / 回复帖子）：实底主题色、44px 高、8px 方角 */
 .bbs-start {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
+  height: 44px;
   text-align: center;
   background: var(--b-accent);
   color: #fff;
   font-size: 14px;
   font-weight: 700;
-  border-radius: 6px;
-  padding: 10px 0;
+  border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   transition: var(--b-tr);
 }
 
 .bbs-start:hover {
-  background: var(--b-accent-dark);
+  background: color-mix(in srgb, var(--b-accent) 82%, #000);
 }
 
 .bbs-nav {
@@ -412,7 +418,6 @@ button {
   margin: 0 2.5px;
   border-radius: 3px;
   flex: none;
-  background: var(--b-accent);
 }
 
 .bbs-nav__icon {
@@ -420,7 +425,6 @@ button {
   height: 15px;
   flex: none;
   display: inline-flex;
-  color: inherit;
 }
 
 .bbs-nav__icon svg {
@@ -470,10 +474,31 @@ button {
 .bbs-mnav .bbs-drop__panel {
   left: 0;
   min-width: 230px;
+  max-width: calc(100vw - 24px);
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .bbs-mnav .bbs-nav {
   margin-top: 0;
+}
+
+/* 移动下拉面板的子分类：与桌面左栏同样的 22px 净缩进，不用树线。
+   树线是 IDE 文件树语言，Flarum / Discourse 侧栏均不用；撤掉色条后
+   12px 撑不住层级（子分类色点继承父色、同组同色，不提供层级信息），
+   故缩进补到与桌面一致的 22px。
+   缩进走 padding 而非 margin：margin 缩短容器会让右对齐的
+   .bbs-nav__count 比一级项左移、数字列参差。
+   面板项左内边距是 12px（.bbs-drop__panel a），故子项 34px */
+.bbs-mnav .bbs-nav__item--child {
+  padding-left: 34px;
+  /* 面板的 .bbs-drop__panel a(13.5px) 特异性高于基础 --child(13px)，在此恢复 */
+  font-size: 13px;
+}
+
+/* 「分类」小标题与项的左内边距对齐（面板项为 12px，基础样式是 10px） */
+.bbs-mnav .bbs-nav__label {
+  margin-left: 12px;
 }
 
 /* 排序下拉 */
@@ -526,6 +551,10 @@ button {
   padding: 14px 12px;
   border-radius: 8px;
   transition: var(--b-tr);
+  /* hip 注册后头像走 Shadow DOM，.bbs-ava 盖不住；按 scene 内置档
+     list=32 / post=40 / comment=36，跟本页兜底尺寸对不上。
+     --hip-avatar-size 只覆盖我们种下的实例（interaction-plus 主题指南） */
+  --hip-avatar-size: 44px;
 }
 
 .bbs-it:hover {
@@ -555,7 +584,8 @@ button {
   color: #fff;
   font-size: 17px;
   font-weight: 700;
-  background: var(--b-accent);
+  /* 默认匿名灰；有用户时由行内 background（显示名哈希，对齐 Flarum）盖掉 */
+  background: #94a3b8;
 }
 
 .bbs-it__main {
@@ -589,15 +619,17 @@ button {
   color: var(--b-accent);
 }
 
-/* 列表摘要（设置 listShowExcerpt 开启时渲染） */
+/* 列表摘要（设置 listShowExcerpt 开启时渲染）：桌面两行，移动端一行 */
 .bbs-it__excerpt {
   margin: 0 0 6px;
   font-size: 13px;
   line-height: 1.45;
   color: var(--b-text-2);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 /* 关闭 Hero 时主栏与顶栏间距略收紧 */
@@ -675,34 +707,15 @@ a.bbs-by__name:hover {
   flex: none;
 }
 
-/* 列表「已编辑」标记（元信息行末尾，纯文字，spec §2.1） */
+/* 列表「已编辑」标记（元信息行末尾，纯文字） */
 .bbs-meta-edited {
   flex: none;
   font-size: 12px;
   color: var(--b-text-3);
 }
 
-/* 分类 chip：彩色底白字（Flarum TagLabel） */
-.bbs-chip {
-  display: inline-flex;
-  align-items: center;
-  flex: none;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #fff;
-  line-height: 1.5;
-  background: var(--b-accent);
-  transition: var(--b-tr);
-}
-
-a.bbs-chip:hover {
-  filter: brightness(0.92);
-}
-
-/* 分类紧贴拼接 Tag（stag）：父子无间隙、中间无圆角、只外轮廓圆角（spec §2.1）。
-   形态就此就位；分类色解耦（独立 color 字段 / 哈希回退）见阶段 C2 */
+/* 分类紧贴拼接 Tag（stag）：父子无间隙、中间无圆角、只外轮廓圆角。
+   分类色空则 .is-plain 中性底 */
 .bbs-stag {
   display: inline-flex;
   align-items: stretch;
@@ -724,11 +737,17 @@ a.bbs-chip:hover {
 }
 
 .bbs-stag__p {
-  background: var(--c1, var(--b-accent));
+  background: var(--c1);
 }
 
 .bbs-stag__c {
-  background: var(--c2, var(--b-accent));
+  background: var(--c2);
+}
+
+.bbs-stag__p.is-plain,
+.bbs-stag__c.is-plain {
+  background: var(--b-hover);
+  color: var(--b-text);
 }
 
 a.bbs-stag:hover {
@@ -753,7 +772,7 @@ a.bbs-stag:hover {
   height: 12px;
 }
 
-/* 徽标语义色写死（spec D3）：公告琥珀 / 置顶主题色 / 问答蓝 */
+/* 徽标语义色固定：公告琥珀 / 置顶主题色 / 问答蓝 */
 .bbs-bic--ann {
   background: var(--b-amber);
 }
@@ -825,7 +844,7 @@ a.bbs-stag:hover {
   stroke-linejoin: round;
 }
 
-/* 右列：圆标 + 评论数，整行垂直居中（圆标 0~4 浮动时标题不抖，spec §2.1） */
+/* 右列：圆标 + 评论数，整行垂直居中（圆标 0~4 浮动时标题不抖） */
 .bbs-it__side {
   flex: none;
   display: flex;
@@ -977,7 +996,7 @@ a.bbs-stag:hover {
 
 /* ---------------- 帖子页 ---------------- */
 
-/* 详情 Hero（spec §2.2 B 套，多行）：面包屑 / 标记行 / 标题（锁在左） */
+/* 详情 Hero（多行）：面包屑 / 标记行 / 标题（锁在左） */
 .bbs-phero {
   background: var(--b-accent);
   color: #fff;
@@ -985,7 +1004,7 @@ a.bbs-stag:hover {
   padding: 28px 20px 32px;
 }
 
-/* Hero 内容居中容器（背景全宽、内容限宽对齐主栏，spec §4.1） */
+/* Hero 内容居中容器（背景全宽、内容限宽对齐主栏） */
 .bbs-phero__in {
   max-width: 1080px;
   margin: 0 auto;
@@ -1004,7 +1023,7 @@ a.bbs-stag:hover {
   display: none;
 }
 
-/* 详情分类 Tag：白底半透（preview .phero .stag） */
+/* 详情分类 Tag：白底半透 */
 .bbs-phero .bbs-stag {
   height: 22px;
   font-size: 12.5px;
@@ -1030,7 +1049,7 @@ a.bbs-stag:hover {
   height: 15px;
 }
 
-/* 标题：锁在左，vertical-align:middle 贴第一行（preview .phero__title-inner） */
+/* 标题：锁在左，vertical-align:middle 贴第一行 */
 .bbs-phero__title {
   margin: 0;
   max-width: 900px;
@@ -1078,13 +1097,13 @@ a.bbs-stag:hover {
 }
 
 /* 楼主楼层：帖子流第一楼
-   align-items:flex-start 必设——默认 stretch 会把左侧 hip-user-card 拉成整楼高度，
-   弹卡 top:100% 就会贴到正文下方而不是头像下方 */
+   align-items:flex-start 必设——默认 stretch 会把左侧 hip-user-card 拉成整楼高度 */
 .bbs-post {
   display: flex;
   align-items: flex-start;
   gap: 16px;
   padding: 20px 0;
+  --hip-avatar-size: 48px;
 }
 
 .bbs-ava--lg {
@@ -1101,15 +1120,37 @@ a.bbs-stag:hover {
   min-width: 0;
 }
 
+/* 身份行：与 .bbs-flr__head / .bbs-rep__head 同一套 flex 居中语言。
+   不能退回 inline + vertical-align:middle——那是把子盒中线对齐到「父级基线 +
+   半个 x-height」这个字体度量参照点，只在兄弟盒高相近时才碰巧居中。装扮开启后
+   hip-user-identity 渲染出的身份行（昵称 + 身份标识）比纯文本高、且标识自基线向上长，
+   视觉中线被顶起而「楼主」标签仍钉在原参照点，标签就偏低了。
+   两行堆叠（昵称行 / 时间行）改由 flex-wrap + 时间行 flex-basis:100% 实现，
+   长装扮昵称照样换行 */
 .bbs-post__head {
   display: flex;
   align-items: center;
-  gap: 10px;
   flex-wrap: wrap;
+  /* 行间距留 0：两行的距离由 .bbs-post__time 的 margin-top 单独管 */
+  gap: 0 8px;
   margin-bottom: 10px;
 }
 
+.bbs-post__head .bbs-post__time {
+  display: flex;
+  /* 独占第二行（原先靠「块级 flex 自然换行」达成） */
+  flex-basis: 100%;
+  margin-top: 3px;
+}
+
+/* 昵称容器：inline-flex 而非行内——里面装的是 hip-user-identity（身份行），
+   走行内布局时它坐在基线上，比文字高就只把行盒顶部撑高，盒心随之高于文字视觉
+   中心，外层 align-items:center 对齐的是这个被抬高的盒心，「楼主」标签就偏上。
+   改成 flex 容器后本元素高度 == 身份行高度，没有半行距也没有基线降部空白。
+   .bbs-flr__name / .bbs-rep__name 同理（三处同款结构） */
 .bbs-post__name {
+  display: inline-flex;
+  align-items: center;
   font-weight: 700;
   font-size: 14.5px;
   transition: var(--b-tr);
@@ -1119,15 +1160,24 @@ a.bbs-post__name:hover {
   color: var(--b-accent);
 }
 
-/* 「楼主」描边小标签 */
+/* 「楼主」描边小标签（楼主楼 / 评论楼 / 回复三处复用）。
+   自居中的定高盒：高度用整数 px 定死，文字位置交给内部 flex——不再让
+   line-height 一个变量同时管「盒子多高」和「文字在盒子里的哪」。
+   原来 11 × 1.6 + 2 边框 = 19.6px 是分数盒高，外层 flex 算
+   (容器高 − 项高)/2 会落在半像素上，取整后能显示成整整 1px 的偏移。
+   20px ≈ 原来的 19.6px，观感不变。flex:none 防行内挤压时被压扁 */
 .bbs-op {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 20px;
+  padding: 0 5px;
   font-size: 11px;
   font-weight: 700;
+  line-height: 1;
   color: var(--b-accent);
   border: 1px solid currentColor;
   border-radius: 4px;
-  padding: 0 5px;
-  line-height: 1.6;
 }
 
 .bbs-post__time {
@@ -1307,16 +1357,16 @@ a.bbs-post__name:hover {
   padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
 }
 
-/* 明确为动作按钮（跳到评论区）：实底主题色，不做输入框拟态以免误导 */
+/* 回复主按钮：实底主题色、方角 8px、44px 高（移动底栏，flex:1） */
 .bbs-mreply__in {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  height: 44px;
   background: var(--b-accent);
   color: #fff;
-  border-radius: 999px;
-  padding: 11px 16px;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 700;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
@@ -1375,6 +1425,54 @@ a.bbs-post__name:hover {
 
 .prose > :last-child {
   margin-bottom: 0;
+}
+
+/* 列表：Jsoup relaxed 白名单放行 ul/ol/li，官方评论组件的 content.css 也带列表样式，
+   这里给出本站版本——同一条评论在锁定前后（组件渲染 / 自建楼层流）排版不该长得不一样。
+   缩进刻意比官方的 2em 收一档：评论正文左边已有头像列的缩进，楼中楼还要再陷一层，
+   累积下来 2em 会把内容挤得太靠右；1.75em 在 15px 正文下约 26px，两位数编号也放得下 */
+.prose ul,
+.prose ol {
+  margin: 0 0 1em;
+  padding-left: 1.75em;
+}
+
+/* 嵌套层贴着父项走，不另起段落间距 */
+.prose li > ul,
+.prose li > ol {
+  margin: 0.25em 0 0;
+}
+
+/* ul 的 disc → circle → square 用浏览器默认即可；ol 嵌套默认逐层都是数字，
+   按中文技术文档惯例改成 数字 → 小写字母 → 罗马数字 */
+.prose ol ol {
+  list-style-type: lower-alpha;
+}
+
+.prose ol ol ol {
+  list-style-type: lower-roman;
+}
+
+.prose li + li {
+  margin-top: 0.25em;
+}
+
+/* 多段落列表项：项内段落收紧，末元素不留尾距（否则 .prose p 的 1em 会把列表撑散） */
+.prose li p {
+  margin-bottom: 0.5em;
+}
+
+.prose li > :last-child {
+  margin-bottom: 0;
+}
+
+/* 标号弱于正文：ul 的圆点纯装饰，压到最淡；ol 的编号要读，只降一档 */
+.prose ul > li::marker {
+  color: var(--b-text-3);
+}
+
+.prose ol > li::marker {
+  color: var(--b-text-2);
 }
 
 .prose img,
@@ -1508,9 +1606,10 @@ a.bbs-post__name:hover {
     display: grid;
   }
 
-  /* 列表条目改网格（用户拍板的分行方案）：
-     第 1 行=标题独占整行宽（跨至行尾）；第 2 行=分类 chip + 右侧徽标/评论数；
-     第 3 行=作者装扮+时间，从第 2 列起与上两行左对齐；头像占第 1-2 行 */
+  /* 列表条目改网格：
+     第 1 行=标题；第 2 行=摘要（开启时独占，2 行截断）；
+     第 3 行=分类 chip + 右侧徽标/评论数；第 4 行=作者+时间。
+     头像只对标题行。摘要未渲染时后续行自动上移。 */
   .bbs-it {
     display: grid;
     grid-template-columns: 40px minmax(0, 1fr) auto;
@@ -1518,6 +1617,7 @@ a.bbs-post__name:hover {
     row-gap: 6px;
     align-items: center;
     padding: 12px 6px;
+    --hip-avatar-size: 40px;
   }
 
   .bbs-it__main,
@@ -1525,12 +1625,13 @@ a.bbs-post__name:hover {
     display: contents;
   }
 
-  /* 头像占第 1-2 行；hip 已注册时网格项是 hip-user-avatar 本身，
+  /* 头像只对标题行；hip 已注册时网格项是 hip-user-avatar 本身，
      未注册（display:contents）或匿名时是 .bbs-ava，两者都声明 */
   .bbs-it hip-user-avatar,
   .bbs-it .bbs-ava {
     grid-column: 1;
-    grid-row: 1 / span 2;
+    grid-row: 1;
+    align-self: start;
   }
 
   .bbs-ava {
@@ -1548,10 +1649,24 @@ a.bbs-post__name:hover {
     margin: 0;
   }
 
+  /* 摘要独占整行，插在标题与分类之间。display:contents 拆开父级后
+     摘要自己是网格项，-webkit-box + line-clamp 仍可用。
+     无摘要时不占第 2 轨，避免空行 gap */
+  .bbs-it__excerpt {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    margin: 0;
+    align-self: start;
+  }
+
   .bbs-it__meta .bbs-stag {
     grid-column: 2;
     grid-row: 2;
     justify-self: start;
+  }
+
+  .bbs-it:has(.bbs-it__excerpt) .bbs-it__meta .bbs-stag {
+    grid-row: 3;
   }
 
   .bbs-it__side {
@@ -1562,7 +1677,11 @@ a.bbs-post__name:hover {
     padding-left: 0;
   }
 
-  /* 第三行：作者装扮 + 时间，与标题/分类左对齐；换行仅作兜底
+  .bbs-it:has(.bbs-it__excerpt) .bbs-it__side {
+    grid-row: 3;
+  }
+
+  /* 作者装扮 + 时间，与标题/分类左对齐；换行仅作兜底
      （极端长度时时间折行而非裁切装扮） */
   .bbs-by {
     grid-column: 2 / -1;
@@ -1573,14 +1692,28 @@ a.bbs-post__name:hover {
     overflow: visible;
   }
 
+  .bbs-it:has(.bbs-it__excerpt) .bbs-by {
+    grid-row: 4;
+  }
+
   .bbs-bic {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
   }
 
   .bbs-bic svg {
-    width: 9px;
-    height: 9px;
+    width: 11px;
+    height: 11px;
+  }
+
+  .bbs-bic--qa svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .bbs-sic {
+    width: 18px;
+    height: 18px;
   }
 
   /* 帖子页 */
@@ -1608,6 +1741,7 @@ a.bbs-post__name:hover {
   .bbs-post {
     gap: 12px;
     padding: 16px 0;
+    --hip-avatar-size: 40px;
   }
 
   .bbs-ava--lg {
@@ -1617,20 +1751,6 @@ a.bbs-post__name:hover {
 
   .bbs-ava--lg.bbs-ava--letter {
     font-size: 15px;
-  }
-
-  /* 装扮昵称可能很长：楼层头两行堆叠（昵称行 / 时间行） */
-  .bbs-post__head {
-    display: block;
-  }
-
-  .bbs-post__head .bbs-post__time {
-    display: flex;
-    margin-top: 3px;
-  }
-
-  .bbs-post__head > * {
-    vertical-align: middle;
   }
 
   /* 页脚让出底部固定栏 / FAB */
@@ -1667,24 +1787,14 @@ hip-user-card {
   flex: none;
 }
 
-/* 悬浮名片（hip-user-card）：
-   - position:relative：弹卡在 shadow 内 absolute，宿主是定位基准
-   - align-self:flex-start：防父级 flex stretch 把宿主拉成整行/整楼高
-     （否则 top:100% = 正文底部，卡片“出现在正文后面”）
-   - z-index 高于 sticky 顶栏（z-50），避免弹卡被顶栏盖住 */
+/* 悬浮名片已走 popover top layer，宿主不再做定位基准 / 层叠。
+   align-self:flex-start 仍要：防父级 flex stretch 把宿主拉成整楼高 */
 hip-user-card {
-  position: relative;
   align-self: flex-start;
-  z-index: 70;
-}
-
-/* 身份行与本页排版对齐（组件内部经 CSS 变量读取） */
-hip-user-identity {
-  --hip-identity-gap: 6px;
 }
 
 /* ============================================================
-   v5 增量 —— 两级分类 / 分类 Hero / 类型徽章 / 问答与锁定
+   两级分类 / 分类 Hero / 类型徽章 / 问答与锁定
    （对齐 Flarum：TagHero 分类色铺底、并排双 TagLabel、
    solved 徽章语言；全部复用既有设计 token）
    ============================================================ */
@@ -1693,76 +1803,33 @@ hip-user-identity {
    无封面时以分类色（--b-cat，模板内联传入）铺底，叠加同向暗化渐变；
    有封面时复用 .bbs-hero--img 的背景图 + 遮罩 */
 .bbs-hero--cat {
-  background: var(--b-cat, var(--b-accent));
+  background: var(--b-cat);
   background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.18));
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* 分类色清空：中性底 + 深字 */
+.bbs-hero--cat.is-plain {
+  background: var(--b-hover);
+  background-image: none;
+  color: var(--b-text);
+  text-shadow: none;
+}
+
+.bbs-hero--cat.is-plain p {
+  color: var(--b-text-2);
 }
 
 .bbs-hero--cat.bbs-hero--img {
   background-image: none;
 }
 
-/* 面包屑：全部帖子 › 父分类 › 子分类 */
-.bbs-hero__crumb {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-  font-size: 12.5px;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-.bbs-hero__crumb a:hover {
-  color: #fff;
-  text-decoration: underline;
-}
-
-.bbs-hero__crumb b {
-  color: #fff;
-  font-weight: 600;
-}
-
-/* 子版块 chips（一级分类页；半透明白胶囊） */
-.bbs-hero__chips {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.bbs-hchip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-  font-size: 12.5px;
-  font-weight: 600;
-  transition: var(--b-tr);
-}
-
-.bbs-hchip:hover {
-  background: rgba(255, 255, 255, 0.28);
-}
-
-.bbs-hchip__count {
-  font-size: 11px;
-  opacity: 0.75;
-  font-variant-numeric: tabular-nums;
-}
-
-.bbs-hchip .bbs-nav__dot {
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
-}
-
 /* ---------------- 左栏分类树：子分类缩进项 ---------------- */
 
+/* 净缩进 22px（= 改动前的 margin-left），视觉不变，但缩进改走 padding：
+   margin 会缩短容器，令右对齐的 .bbs-nav__count 比一级项左移、数字列参差 */
 .bbs-nav__item--child {
-  margin-left: 22px;
+  padding-left: 32px;
   font-size: 13px;
   font-weight: 400;
 }
@@ -1785,7 +1852,7 @@ hip-user-identity {
 .bbs-typebar a {
   flex: none;
   padding: 4px 12px;
-  border-radius: 999px;
+  border-radius: 6px;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--b-text-2);
@@ -1801,7 +1868,7 @@ hip-user-identity {
   color: #fff;
 }
 
-/* ---------------- 详情页：面包屑 / 右栏分享 / 锁定与关评论 ---------------- */
+/* ---------------- 详情页：面包屑 / 右栏分享 / 锁定 ---------------- */
 
 .bbs-phero__crumb {
   display: flex;
@@ -1820,7 +1887,7 @@ hip-user-identity {
   text-decoration: underline;
 }
 
-/* 右栏分享按钮（回复按钮下方，描边胶囊） */
+/* 右栏分享按钮：与回复按钮同款 44px 8px 方角，描边中性色 */
 .bbs-side-share {
   display: flex;
   align-items: center;
@@ -1828,12 +1895,13 @@ hip-user-identity {
   gap: 8px;
   width: 100%;
   margin-top: 10px;
-  padding: 9px 16px;
+  height: 44px;
   border: 1px solid var(--b-line);
-  border-radius: 999px;
-  font-size: 13.5px;
+  border-radius: 8px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--b-text-2);
+  background: var(--b-bg);
   transition: var(--b-tr);
 }
 
@@ -1856,7 +1924,7 @@ hip-user-identity {
   text-align: center;
 }
 
-/* 状态说明条（spec §2.2 / §4.2）：已解决绿 tip + 锁定/关评灰条，单行无边框 */
+/* 状态说明条：已解决绿 tip + 锁定灰条，单行无边框 */
 .bbs-notice {
   display: flex;
   align-items: center;
@@ -1880,14 +1948,14 @@ hip-user-identity {
   color: var(--b-green);
 }
 
-/* 头像下拉菜单分隔线（后台管理 / 退出与其他项之间，spec §6.3） */
+/* 头像下拉菜单分隔线（后台管理 / 退出与其他项之间） */
 .bbs-menu__div {
   height: 1px;
   margin: 4px 8px;
   background: var(--b-line);
 }
 
-/* 锁定 / 关评说明条（restyle 自 .bbs-cmts__closed，spec §4.2：灰底无边框） */
+/* 锁定说明条（restyle 自 .bbs-cmts__closed：灰底无边框） */
 .bbs-cmts__closed {
   display: flex;
   align-items: center;
@@ -1972,104 +2040,418 @@ hip-user-identity {
     padding-top: 26px;
     padding-bottom: 30px;
   }
-
-  .bbs-hero__chips {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    justify-content: flex-start;
-    padding: 0 4px 4px;
-    scrollbar-width: none;
-  }
-
-  .bbs-hero__chips::-webkit-scrollbar {
-    display: none;
-  }
-
-  .bbs-hchip {
-    flex: none;
-  }
 }
 
-/* ---------------- 只读评论列表（锁定 / 关评论帖） ----------------
-   官方评论组件不渲染时由 bbs.js 按公开评论 API 拼装；
-   视觉贴近官方组件的评论行：头像 + 名字时间行 + 内容 */
+/* ---------------- 只读评论楼层流（锁定帖） ----------------
+   官方评论组件不渲染时（其 shadow DOM 输入框藏不掉）由 bbs.js 按 BBS 自建端点拼装。
+   不做成「评论列表」而是**帖子流的续楼**：楼主是 1 楼，评论顺延 2 楼、3 楼——
+   头像左缘 / 正文左缘与 .bbs-post 贯通，楼层之间 1px 细线定节奏（Flarum PostStream）。
+   照抄官方评论组件形态（34px 头像 + 紧凑行）会让 1 楼→2 楼断层，读起来像页面里
+   嵌了个评论插件，故刻意不与 <halo:comment> 那条路径对齐，而与本页帖子流对齐。
+   身份行：昵称 +「楼主」靠左、置顶钉靠右；「回复 @」是正文引导语；
+   动作栏时间左、赞 / 回复数 / 楼层号右（Bilibili / 知乎楼中楼，桌面窄屏同一套）。 */
 
-.bbs-roc__cell + .bbs-roc__cell {
-  margin-top: 18px;
-}
-
-.bbs-roc__item {
+.bbs-flr {
   display: flex;
-  gap: 10px;
+  /* 同 .bbs-post：必设，否则 stretch 会把 hip-user-card 拉成整楼高 */
   align-items: flex-start;
+  gap: 16px;
+  padding: 20px 0;
+  border-top: 1px solid var(--b-line);
+  /* #c-{name} 锚点跳转时不被顶栏遮住 */
+  scroll-margin-top: 70px;
+  --hip-avatar-size: 40px;
 }
 
-.bbs-roc__item--reply {
-  margin-top: 12px;
+/* 首楼紧接「N 条评论」标题，不叠第三条线 */
+.bbs-flr:first-child {
+  border-top: 0;
+  padding-top: 2px;
 }
 
-.bbs-roc__ava {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--b-hover);
-  object-fit: cover;
+/* 头像复用列表 / 楼主的 .bbs-ava 语言（圆形、字母态哈希色底白字），只压尺寸：
+   楼主 48 → 楼层 40 → 回复 26，三级层级 */
+.bbs-ava--flr {
+  width: 40px;
+  height: 40px;
 }
 
-.bbs-roc__item--reply .bbs-roc__ava {
-  width: 28px;
-  height: 28px;
+.bbs-ava--flr.bbs-ava--letter {
+  font-size: 15px;
 }
 
-.bbs-roc__body {
+.bbs-ava--rep {
+  width: 26px;
+  height: 26px;
+}
+
+.bbs-ava--rep.bbs-ava--letter {
+  font-size: 11px;
+}
+
+.bbs-flr__main {
   flex: 1;
   min-width: 0;
 }
 
-.bbs-roc__head {
+/* 身份行：昵称 +「楼主」靠左，置顶钉靠右（margin-left:auto）。
+   nowrap 防装扮把钉挤到下一行；昵称 min-width:0 让长装扮收缩而不是顶掉钉。
+   时间不进这一行——沉到动作栏，桌面 / 窄屏同一套 */
+.bbs-flr__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: 8px;
-  font-size: 13px;
+  min-width: 0;
+  margin-bottom: 6px;
 }
 
-.bbs-roc__head span {
+/* 同 .bbs-post__name：flex 容器收掉行内基线层，高度即身份行高度 */
+/* overflow 裁在「楼主」左侧，避免长装扮盖住标签 / 钉。
+   装扮若从身份组件盒外探出（少见）会被竖向裁一截——换不裁就会叠到钉上 */
+.bbs-flr__name {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  font-size: 14.5px;
+  transition: var(--b-tr);
+}
+
+a.bbs-flr__name:hover {
+  color: var(--b-accent);
+}
+
+/* 楼层号：锁定帖是归档讨论，「看 5 楼」的引用需求真实存在，故给可点锚点；
+   压到最弱（12px / .7 透明度 / hover 才上色）不跟时间抢 */
+.bbs-flr__no {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  transition: var(--b-tr);
+}
+
+a.bbs-flr__no:hover {
+  opacity: 1;
+  color: var(--b-accent);
+}
+
+/* 置顶圆标沿用 §2.1 bic 语言（实底主题色圆 + 图钉），比列表小一号。
+   钉挂身份行右上：楼层状态，不是用户徽章，不贴「楼主」。
+   置顶楼不占楼层号：号表达「第几个发的」，而置顶楼被提到最前，两者会打架 */
+.bbs-flr .bbs-bic {
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  flex: none;
+  /* 长装扮从昵称盒溢出时压在钉下面，钉始终可见 */
+  position: relative;
+  z-index: 1;
+}
+
+.bbs-flr .bbs-bic svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* 正文直接挂 .prose：引用 / 代码块 / 图片 / 表格与帖子正文同一套排版，只压一档字号。
+   内容按 HTML 渲染（Halo Comment.spec.content 写入时已净化，详见 bbs.js roItem） */
+.bbs-flr__body {
+  font-size: 14.5px;
+}
+
+/* 动作栏：时间左，赞 / 回复数 / 楼号右（锁定＝只看不赞：不提供点赞按钮）。
+   窄屏 wrap 时时间仍先、右侧一组不拆散（actions nowrap + margin-left:auto） */
+.bbs-flr__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 10px;
   font-size: 12px;
   color: var(--b-text-3);
 }
 
-.bbs-roc__content {
-  margin-top: 2px;
-  font-size: 14px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--b-text);
+.bbs-flr__actions {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 14px;
+  margin-left: auto;
 }
 
-/* 回复缩进块：左侧细线示从属 */
-.bbs-roc__replies {
-  margin: 4px 0 0 44px;
-  padding-left: 12px;
-  border-left: 2px solid var(--b-line);
+.bbs-flr__foot > time {
+  flex: none;
+  white-space: nowrap;
 }
 
-.bbs-roc__more {
-  margin: 8px 0 0 44px;
+.bbs-flr__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bbs-flr__foot svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* 楼中楼：陷入一层的浅底块。底色用 --b-sunken 而非 --b-hover——
+   行内代码底就是 --b-hover，同色会把回复里的代码整块吃掉；
+   且锁定说明条也是 --b-hover 圆角块，会撞成同一种语义（圆角对齐说明条的 8px） */
+.bbs-flr__replies {
+  margin-top: 12px;
+  padding: 4px 14px;
+  background: var(--b-sunken);
+  border-radius: 8px;
+}
+
+.bbs-rep {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  /* 盖掉从 .bbs-flr 继承的 40，以及 scene="comment reply" 对不上
+     内置精确选择器 :host([scene="comment"]) 时回落的 40 */
+  --hip-avatar-size: 26px;
+}
+
+/* 楼中楼条目之间：浅底块管层级，细线管块内节奏（B 站楼中楼）。
+   相邻两条才画，1 条回复时块里仍干净；「展开剩余」是 button 不是 .bbs-rep，不会误伤 */
+.bbs-rep + .bbs-rep {
+  border-top: 1px solid var(--b-line);
+}
+
+.bbs-rep__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.bbs-rep__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 2px;
+}
+
+/* 同 .bbs-post__name：flex 容器收掉行内基线层 */
+.bbs-rep__name {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* 「回复 @昵称」：正文引导语，插在第一段开头跟正文同一行。
+   弱化灰字且不做链接——它是指向关系而非身份入口，上色会跟昵称抢注意力 */
+.bbs-rep__to {
+  display: inline;
+  margin-right: 0.4em;
   font-size: 12.5px;
-  color: var(--b-accent);
-}
-
-.bbs-roc__more:hover {
-  text-decoration: underline;
-}
-
-.bbs-roc__more:disabled {
   color: var(--b-text-3);
 }
 
-/* 顶层「加载更多评论」不缩进 */
-#bbsRoComments > .bbs-roc__more {
-  margin-left: 0;
-  margin-top: 16px;
+/* 楼中楼动作栏：时间左、赞右，与楼层同一套左右拆分 */
+.bbs-rep__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--b-text-3);
+}
+
+.bbs-rep__actions {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.bbs-rep__foot > time {
+  flex: none;
+  white-space: nowrap;
+}
+
+.bbs-rep__up {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bbs-rep__up svg {
+  width: 12px;
+  height: 12px;
+}
+
+.bbs-rep__body {
+  margin-top: 2px;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+/* 「展开剩余 N 条回复」（灰块内）/「加载更多评论」（楼层流末尾居中） */
+.bbs-more {
+  font-size: 12.5px;
+  color: var(--b-accent);
+  transition: var(--b-tr);
+}
+
+.bbs-more:hover {
+  text-decoration: underline;
+}
+
+.bbs-more:disabled {
+  color: var(--b-text-3);
+  text-decoration: none;
+}
+
+.bbs-flr__replies .bbs-more {
+  margin: 2px 0 8px;
+}
+
+#bbsRoComments > .bbs-more {
+  display: block;
+  margin: 18px auto 0;
+}
+
+/* 楼层流收尾：锁定帖是归档，滚到底要有个收口。
+   刻意不重复「已锁定」文案——那句由评论区上方的说明条独占 */
+.bbs-cmts__end {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--b-line);
+  text-align: center;
+  font-size: 12px;
+  color: var(--b-text-3);
+}
+
+.bbs-cmts__empty {
+  padding: 28px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--b-text-3);
+}
+
+@media (max-width: 800px) {
+  .bbs-flr {
+    gap: 12px;
+    padding: 16px 0;
+    --hip-avatar-size: 36px;
+  }
+
+  .bbs-ava--flr {
+    width: 36px;
+    height: 36px;
+  }
+
+  .bbs-ava--flr.bbs-ava--letter {
+    font-size: 14px;
+  }
+
+  .bbs-flr__replies {
+    padding: 2px 10px;
+  }
+}
+
+/* ============================================================
+   无主题色（.is-unthemed）
+   主题色清空时模板不写 --b-accent；实底 + 白字控件在此改为
+   中性底 / 深字，保证可读。全透明主题色仍写入 --b-accent，不走本块。
+   分类 Hero 与 Banner 图不依赖主题色。
+   ============================================================ */
+
+.bbs-body.is-unthemed .bbs-lg__mark {
+  color: var(--b-text);
+}
+
+.bbs-body.is-unthemed .bbs-hs input[type="search"]:focus {
+  box-shadow: 0 0 0 2px var(--b-text-3);
+}
+
+.bbs-body.is-unthemed .bbs-me.open .bbs-me__ava {
+  box-shadow: 0 0 0 2px var(--b-bg), 0 0 0 4px var(--b-line);
+}
+
+.bbs-body.is-unthemed .bbs-me__login,
+.bbs-body.is-unthemed .bbs-start:not(.is-disabled),
+.bbs-body.is-unthemed .bbs-mreply__in,
+.bbs-body.is-unthemed .bbs-fab {
+  background: var(--b-hover);
+  color: var(--b-text);
+  box-shadow: none;
+}
+
+.bbs-body.is-unthemed .bbs-me__login:hover,
+.bbs-body.is-unthemed .bbs-start:not(.is-disabled):hover {
+  background: var(--b-line);
+}
+
+.bbs-body.is-unthemed .bbs-hero:not(.bbs-hero--img):not(.bbs-hero--cat) {
+  background: var(--b-hover);
+  color: var(--b-text);
+}
+
+.bbs-body.is-unthemed .bbs-hero:not(.bbs-hero--img):not(.bbs-hero--cat) p {
+  color: var(--b-text-2);
+}
+
+.bbs-body.is-unthemed .bbs-phero {
+  background: var(--b-hover);
+  color: var(--b-text);
+}
+
+.bbs-body.is-unthemed .bbs-phero__title {
+  color: var(--b-text);
+}
+
+.bbs-body.is-unthemed .bbs-phero__title .bbs-lock-inline {
+  color: var(--b-text-2);
+}
+
+.bbs-body.is-unthemed .bbs-phero__crumb {
+  color: var(--b-text-2);
+}
+
+.bbs-body.is-unthemed .bbs-phero__crumb a {
+  color: var(--b-text);
+}
+
+.bbs-body.is-unthemed .bbs-bic--pin {
+  background: var(--b-lock);
+}
+
+.bbs-body.is-unthemed .bbs-typebar a.is-on {
+  background: var(--b-line);
+  color: var(--b-text);
+}
+
+/* 正文链接：其余纯 color 的主题色用法（hover 态 / 强调字）失效后继承父色即可，
+   唯独这里不行——.prose 的父色就是正文黑，链接会与正文同色、只剩下划线可辨。
+   蓝色是链接的默认语义色，不跟主题色。
+   暗底下 --b-blue(#2563eb) 只有 3.41:1，够不上 WCAG AA，故单独提亮 */
+.bbs-body.is-unthemed .prose a {
+  color: var(--b-blue);
+}
+
+@media (prefers-color-scheme: dark) {
+  .bbs-body.is-unthemed .prose a {
+    color: #60a5fa;
+  }
 }

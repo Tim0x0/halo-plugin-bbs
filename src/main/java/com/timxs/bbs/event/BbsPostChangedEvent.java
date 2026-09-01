@@ -13,6 +13,7 @@ import run.halo.app.plugin.SharedEvent;
  *
  * @author Tim0x0
  */
+@SharedEvent
 public class BbsPostChangedEvent extends ApplicationEvent {
 
     public BbsPostChangedEvent(Object source) {

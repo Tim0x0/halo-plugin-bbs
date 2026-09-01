@@ -1,10 +1,9 @@
 package com.timxs.bbs.integration;
 
 import com.timxs.bbs.finder.BbsFinder;
-import com.timxs.bbs.router.BbsRouter.AppearanceSetting;
-import com.timxs.bbs.router.BbsRouter.AppearanceSetting.Brand;
-import com.timxs.bbs.router.BbsRouter.BrowsingSetting;
-import com.timxs.bbs.router.BbsRouter.BrowsingSetting.Rss;
+import com.timxs.bbs.service.BbsSettings;
+import com.timxs.bbs.service.BbsSettings.Brand;
+import com.timxs.bbs.service.BbsSettings.Rss;
 import com.timxs.bbs.vo.BbsPostVo;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -13,7 +12,6 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import run.halo.app.infra.ExternalUrlSupplier;
-import run.halo.app.plugin.ReactiveSettingFetcher;
 import run.halo.feed.RSS2;
 import run.halo.feed.RssRouteItem;
 
@@ -38,7 +36,7 @@ public class BbsCategoryRssRouteItem implements RssRouteItem {
     private static final int MAX_RSS_SIZE = 100;
 
     private final BbsFinder bbsFinder;
-    private final ReactiveSettingFetcher settingFetcher;
+    private final BbsSettings settings;
     private final ExternalUrlSupplier externalUrlSupplier;
 
     @Override
@@ -113,14 +111,10 @@ public class BbsCategoryRssRouteItem implements RssRouteItem {
     }
 
     private Mono<Brand> brandSetting() {
-        return settingFetcher.fetch("appearance", AppearanceSetting.class)
-                .map(AppearanceSetting::brandOrEmpty)
-                .defaultIfEmpty(new Brand(null, null, null, null));
+        return settings.appearance().map(BbsSettings.Appearance::brand);
     }
 
     private Mono<Rss> rssSetting() {
-        return settingFetcher.fetch("browsing", BrowsingSetting.class)
-                .map(BrowsingSetting::rssOrEmpty)
-                .defaultIfEmpty(new Rss(null, null));
+        return settings.browsing().map(BbsSettings.Browsing::rss);
     }
 }

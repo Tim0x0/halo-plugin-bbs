@@ -4,16 +4,23 @@ import { VPageHeader } from '@halo-dev/components'
 import { RichTextEditor, VueEditor, ExtensionsKit } from '@halo-dev/richtext-editor'
 import type { Attachment } from '@halo-dev/api-client'
 import type { AxiosRequestConfig } from 'axios'
+import PostSidePanel from '@/shared/PostSidePanel.vue'
 
 /**
  * 帖子编辑器骨架，对标 Halo 官方文章编辑器：顶部 VPageHeader（操作按钮由父组件
- * 透传）+ 全屏富文本，标题作为原生 input 注入 RichTextEditor 的 #content 槽。
+ * 透传）+ 全屏富文本，标题作为原生 input 注入 RichTextEditor 的 #content 槽，
+ * 右侧 #extra 槽挂「大纲 / 详情」边栏（>=640px 显示，窄屏自动隐藏）。
+ * 详情内容（帖子只读信息）由父组件经 #details 槽传入。
  *
  * Console / UC 两个发帖页共用本组件，仅图片上传实现与设置字段不同。
  */
 const props = defineProps<{
   pageTitle: string
   uploadImage: (file: File, options?: AxiosRequestConfig) => Promise<Attachment>
+}>()
+
+const emit = defineEmits<{
+  update: []
 }>()
 
 const title = defineModel<string>('title', { default: '' })
@@ -45,6 +52,8 @@ onMounted(() => {
     parseOptions: { preserveWhitespace: true },
     onUpdate: () => {
       raw.value = editor.value?.getHTML() || ''
+      // 对齐 Halo 官方编辑器：只有编辑器真实更新才通知父级写本地缓存。
+      emit('update')
     },
   })
 })
@@ -56,7 +65,9 @@ onBeforeUnmount(() => {
 // 父组件异步加载已有帖子正文后会更新 raw，此时把内容灌进编辑器。
 watch(raw, (val) => {
   if (editor.value && val !== editor.value.getHTML()) {
-    editor.value.commands.setContent(val || '')
+    // Tiptap 3 的 setContent 默认 emitUpdate=true。服务端加载和缓存恢复都属于
+    // 程序性回填，不能再次伪装成用户输入，否则会触发缓存和自动保存。
+    editor.value.commands.setContent(val || '', { emitUpdate: false })
   }
 })
 </script>
@@ -80,8 +91,16 @@ watch(raw, (val) => {
             type="text"
             placeholder="请输入标题…"
             class="bbs-editor__title"
+            @input="emit('update')"
             @keydown.enter="focusEditor"
           />
+        </template>
+        <template #extra>
+          <PostSidePanel :editor="editor">
+            <template #details>
+              <slot name="details" />
+            </template>
+          </PostSidePanel>
         </template>
       </RichTextEditor>
     </div>
@@ -92,6 +111,7 @@ watch(raw, (val) => {
 .bbs-editor {
   display: flex;
   flex-direction: column;
+  height: 100%;
 }
 
 .bbs-editor__container {

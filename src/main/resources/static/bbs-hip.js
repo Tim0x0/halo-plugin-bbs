@@ -75,9 +75,14 @@
     return wrap;
   };
 
+  var xsrf = (document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/) || [])[1];
+  var headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  if (xsrf) {
+    headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf);
+  }
   fetch('/apis/api.interaction-plus.timxs.com/v1alpha1/identities', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: headers,
     // 批量接口单次上限 50；超出部分不回填，对应 hip 组件注入 runtime 后自行单发
     body: JSON.stringify({ userNames: names.slice(0, 50) })
   }).then(function (r) {
@@ -97,8 +102,8 @@
       if (!it) return;
       var deco = it.decorations || {};
       applyNameStyle(el, deco.nameStyle && deco.nameStyle.nameStyle);
-      var marks = (it.identityMarks || []).slice()
-        .sort(function (a, b) { return (a.priority || 0) - (b.priority || 0); });
+      /* 接口已按 priority 降序；[0] = 最高优先级 */
+      var marks = it.identityMarks || [];
       if (marks.length) {
         el.insertAdjacentElement('afterend', buildMark(marks[0]));
       }

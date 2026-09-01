@@ -1,17 +1,15 @@
 package com.timxs.bbs.integration;
 
 import com.timxs.bbs.finder.BbsFinder;
-import com.timxs.bbs.router.BbsRouter.AppearanceSetting;
-import com.timxs.bbs.router.BbsRouter.AppearanceSetting.Brand;
-import com.timxs.bbs.router.BbsRouter.BrowsingSetting;
-import com.timxs.bbs.router.BbsRouter.BrowsingSetting.Rss;
+import com.timxs.bbs.service.BbsSettings;
+import com.timxs.bbs.service.BbsSettings.Brand;
+import com.timxs.bbs.service.BbsSettings.Rss;
 import com.timxs.bbs.vo.BbsPostVo;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import reactor.core.publisher.Mono;
 import run.halo.app.infra.ExternalUrlSupplier;
-import run.halo.app.plugin.ReactiveSettingFetcher;
 import run.halo.feed.RSS2;
 import run.halo.feed.RssRouteItem;
 
@@ -33,8 +31,8 @@ import run.halo.feed.RssRouteItem;
  * <p>handler 不吞错成 empty：plugin-feed 的 {@code RssCacheManager} 用 {@code doOnNext} 取 RSS2，
  * empty 会导致其 {@code rss2==null} 而 NPE；错误应直接传播（对齐官方 plugin-moments）。</p>
  *
- * <p>设置复用 {@link BbsRouter} 的 setting record（与 settings.yaml formSchema 完全对齐，
- * 反序列化安全）：{@code appearance.brand} 取标题/副标题，{@code browsing.rss} 取条数。</p>
+ * <p>设置经 {@link BbsSettings} 读取：{@code appearance.brand} 取标题/副标题，
+ * {@code browsing.rss} 取条数。</p>
  *
  * @author Tim0x0
  */
@@ -45,7 +43,7 @@ public class BbsRssRouteItem implements RssRouteItem {
     private static final int MAX_RSS_SIZE = 100;
 
     private final BbsFinder bbsFinder;
-    private final ReactiveSettingFetcher settingFetcher;
+    private final BbsSettings settings;
     private final ExternalUrlSupplier externalUrlSupplier;
 
     @Override
@@ -115,14 +113,10 @@ public class BbsRssRouteItem implements RssRouteItem {
     }
 
     private Mono<Brand> brandSetting() {
-        return settingFetcher.fetch("appearance", AppearanceSetting.class)
-                .map(AppearanceSetting::brandOrEmpty)
-                .defaultIfEmpty(new Brand(null, null, null, null));
+        return settings.appearance().map(BbsSettings.Appearance::brand);
     }
 
     private Mono<Rss> rssSetting() {
-        return settingFetcher.fetch("browsing", BrowsingSetting.class)
-                .map(BrowsingSetting::rssOrEmpty)
-                .defaultIfEmpty(new Rss(null, null));
+        return settings.browsing().map(BbsSettings.Browsing::rss);
     }
 }

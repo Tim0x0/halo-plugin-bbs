@@ -1,43 +1,137 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
+import { Draggable } from '@he-tree/vue'
+import '@he-tree/vue/style/default.css'
 import {
   VPageHeader,
   VButton,
   VCard,
-  VSpace,
   VEmpty,
   VLoading,
-  VEntityContainer,
-  VEntity,
-  VEntityField,
-  VStatusDot,
-  VDropdownItem,
   Toast,
-  Dialog,
   IconAddCircle,
-  IconArrowLeft,
-  IconRefreshLine,
 } from '@halo-dev/components'
-import { Icon } from '@iconify/vue'
 import RiFolder2Line from '~icons/ri/folder-2-line'
-import { consoleApi, categoryApi } from '@/api/bbs'
+import { consoleApi } from '@/api/bbs'
 import type { CategoryVo } from '@/types/bbs'
+import CategoryListItem from '@/console/components/CategoryListItem.vue'
 import CategoryEditingModal from '@/console/components/CategoryEditingModal.vue'
 
 /**
- * 分类管理页：带已发布帖子数的列表 + 创建/编辑弹窗。
- * 由帖子列表页「分类」按钮进入（对标官方文章的分类管理）。
+ * 分类管理页（对标 Halo 官方 CategoryList）：
+ * @he-tree/vue Draggable 渲染树 + CategoryListItem 项组件。
+ * 后端 assembleCategoryVos 返回树序平铺，一级 vo.children 已内嵌子分类。
+ *
+ * 拖拽后不再逐个回写 priority，而是对比拖拽前后的树算出「哪个节点移到了哪」，
+ * 调一次位置 API 由服务端重排（对齐官方 updateCategoryPosition）。这样才支持
+ * 跨层拖拽换父级，也不会因部分请求失败留下顺序空洞。
  */
 const loading = ref(false)
 const categories = ref<CategoryVo[]>([])
+const categoriesTree = ref<CategoryVo[]>([])
+const positionUpdating = ref(false)
 const modalVisible = ref(false)
 const editingCategory = ref<CategoryVo | undefined>()
+const creatingByParent = ref<CategoryVo | undefined>()
+
+/** 节点在树中的位置：父级 name（根为 ''）+ 同级下标 */
+interface TreePosition {
+  parent: string
+  index: number
+}
+
+/**
+ * 拖拽前的位置快照。存纯数据而非节点引用——he-tree 会就地 mutate 树数组，
+ * 存引用的话「拖拽前」会跟着一起变，对比不出差异。
+ */
+const positionSnapshot = ref<Map<string, TreePosition>>(new Map())
+
+function flattenPositions(nodes: CategoryVo[], parent = ''): Map<string, TreePosition> {
+  const result = new Map<string, TreePosition>()
+  const walk = (list: CategoryVo[], parentName: string) => {
+    list.forEach((node, index) => {
+      result.set(node.name, { parent: parentName, index })
+      if (node.children?.length) {
+        walk(node.children, node.name)
+      }
+    })
+  }
+  walk(nodes, parent)
+  return result
+}
+
+/** 找某节点在当前树中的后继兄弟（用作 beforeName）；已是末位则返回 null */
+function nextSiblingOf(nodes: CategoryVo[], name: string): string | null {
+  const findIn = (list: CategoryVo[]): string | null | undefined => {
+    const index = list.findIndex((n) => n.name === name)
+    if (index >= 0) {
+      return index + 1 < list.length ? list[index + 1].name : null
+    }
+    for (const node of list) {
+      if (node.children?.length) {
+        const found = findIn(node.children)
+        if (found !== undefined) {
+          return found
+        }
+      }
+    }
+    return undefined
+  }
+  return findIn(nodes) ?? null
+}
+
+/**
+ * 从拖拽前后的位置对比中算出被移动的节点——一次拖拽只动一个节点。
+ *
+ * 换父的节点优先（跨层拖拽意图明确）；同父内重排时取「位移最大」的那个：
+ * 被移动的元素位移 k，被它挤开的元素各只位移 1。k=1 的相邻交换两者位移相同，
+ * 但此时「把 A 移到 B 后」与「把 B 移到 A 前」结果一致，取谁都对。
+ */
+function buildMoveRequest(
+  before: Map<string, TreePosition>,
+  afterTree: CategoryVo[]
+): { name: string; parentName: string | null; beforeName: string | null } | null {
+  const after = flattenPositions(afterTree)
+
+  let moved: string | undefined
+  for (const [name, position] of after) {
+    const previous = before.get(name)
+    if (previous && previous.parent !== position.parent) {
+      moved = name
+      break
+    }
+  }
+
+  if (!moved) {
+    let maxDelta = 0
+    for (const [name, position] of after) {
+      const previous = before.get(name)
+      if (!previous) {
+        continue
+      }
+      const delta = Math.abs(position.index - previous.index)
+      if (delta > maxDelta) {
+        maxDelta = delta
+        moved = name
+      }
+    }
+  }
+
+  if (!moved) {
+    return null
+  }
+  return {
+    name: moved,
+    parentName: after.get(moved)?.parent || null,
+    beforeName: nextSiblingOf(afterTree, moved),
+  }
+}
 
 async function fetchCategories() {
   loading.value = true
   try {
     const { data } = await consoleApi.listCategories()
-    categories.value = data || []
+    applyCategories(data || [])
   } catch {
     /* 请求错误由全局拦截器提示 */
   } finally {
@@ -45,110 +139,74 @@ async function fetchCategories() {
   }
 }
 
-// 拖拽排序（对齐官方分类管理）：拖动行调整顺序，落点后把 priority 回写为行下标
-const dragIndex = ref<number | null>(null)
-const reordering = ref(false)
-const canDrag = computed(() => !loading.value && !reordering.value)
-
-function onDragStart(index: number) {
-  dragIndex.value = index
+/** 用服务端返回的树序平铺列表刷新本地树，并重建位置快照 */
+function applyCategories(list: CategoryVo[]) {
+  categories.value = list
+  // 统一补 children 空数组：后端只给一级分类填 children，而 he-tree 拖拽时会往目标
+  // 节点的 children 里插入——落到 children 为 undefined 的子分类上会直接报错。
+  // 层级是否合法由后端校验，这里只保证拖拽过程不崩。
+  const withChildren = (node: CategoryVo): CategoryVo => ({
+    ...node,
+    children: (node.children || []).map(withChildren),
+  })
+  categoriesTree.value = list.filter((c) => !c.parentName).map(withChildren)
+  positionSnapshot.value = flattenPositions(categoriesTree.value)
 }
 
-function onDragEnd() {
-  dragIndex.value = null
-}
-
-async function onDrop(targetIndex: number) {
-  const from = dragIndex.value
-  dragIndex.value = null
-  if (from === null || from === targetIndex) {
+async function handleUpdatePosition() {
+  if (positionUpdating.value) {
     return
   }
-  const list = categories.value.slice()
-  const [moved] = list.splice(from, 1)
-  list.splice(targetIndex, 0, moved)
-  categories.value = list
-  await persistOrder()
-}
-
-async function persistOrder() {
-  reordering.value = true
-  const results = await Promise.allSettled(
-    categories.value
-      .map((category, index) => ({ category, index }))
-      .filter(({ category, index }) => (category.priority ?? 0) !== index)
-      .map(({ category, index }) =>
-        categoryApi.patch(category.name, [
-          { op: 'replace', path: '/spec/priority', value: index },
-        ])
-      )
-  )
-  const failed = results.filter((r) => r.status === 'rejected').length
-  if (failed === 0) {
-    Toast.success('分类顺序已保存')
-  } else {
-    Toast.warning(`部分排序保存失败（${failed} 项）`)
+  const request = buildMoveRequest(positionSnapshot.value, categoriesTree.value)
+  if (!request) {
+    // 拖回原位，无需请求
+    positionSnapshot.value = flattenPositions(categoriesTree.value)
+    return
   }
-  reordering.value = false
-  await fetchCategories()
+  positionUpdating.value = true
+  try {
+    const { data } = await consoleApi.moveCategory(request.name, {
+      parentName: request.parentName,
+      beforeName: request.beforeName,
+    })
+    applyCategories(data || [])
+    Toast.success('分类顺序已保存')
+  } catch {
+    // 请求错误由全局拦截器提示（如超出两级层级限制）；回拉服务端顺序回滚本地树
+    await fetchCategories()
+  } finally {
+    positionUpdating.value = false
+  }
 }
 
 function openCreate() {
   editingCategory.value = undefined
+  creatingByParent.value = undefined
   modalVisible.value = true
 }
-
 function openEdit(category: CategoryVo) {
   editingCategory.value = category
+  creatingByParent.value = undefined
   modalVisible.value = true
 }
-
-function onDelete(category: CategoryVo) {
-  const count = category.postCount || 0
-  const childCount = category.children?.length || 0
-  const parts: string[] = []
-  if (count > 0) {
-    parts.push(`下还有 ${count} 篇已发布帖子，删除后这些帖子将变为无分类`)
-  }
-  if (childCount > 0) {
-    parts.push(`其 ${childCount} 个子分类将变为一级分类`)
-  }
-  Dialog.warning({
-    title: '删除分类',
-    description:
-      parts.length > 0
-        ? `「${category.displayName}」${parts.join('；')}。确定删除吗？`
-        : `确定删除「${category.displayName}」吗？`,
-    confirmType: 'danger',
-    onConfirm: async () => {
-      try {
-        await categoryApi.delete(category.name)
-        Toast.success('已删除')
-        await fetchCategories()
-      } catch {
-        /* 请求错误由全局拦截器提示 */
-      }
-    },
-  })
+function openCreateByParent(parent: CategoryVo) {
+  editingCategory.value = undefined
+  creatingByParent.value = parent
+  modalVisible.value = true
 }
 
 onMounted(fetchCategories)
 </script>
 
 <template>
-  <VPageHeader title="BBS 社区分类">
+  <VPageHeader title="帖子分类">
     <template #icon>
-      <RiFolder2Line class="header-icon" />
+      <RiFolder2Line class="bbs-header-icon" />
     </template>
     <template #actions>
-      <VButton size="sm" :route="{ name: 'BbsPosts' }">
-        <template #icon><IconArrowLeft /></template>
-        返回
-      </VButton>
-      <VButton size="sm" @click="fetchCategories">
-        <template #icon><IconRefreshLine /></template>
-        刷新
-      </VButton>
+      <!-- 返回帖子列表：与回收站页的返回入口完全一致（默认色 + 文案「返回」），
+           两处都是退出动作，强调色留给「新建分类」这类主动作 -->
+      <VButton size="sm" :route="{ name: 'BbsPosts' }">返回</VButton>
       <VButton type="secondary" @click="openCreate">
         <template #icon><IconAddCircle /></template>
         新建分类
@@ -156,108 +214,40 @@ onMounted(fetchCategories)
     </template>
   </VPageHeader>
 
-  <div class="page-body">
+  <div class="bbs-page-body">
     <VCard :body-class="['!p-0']">
+      <!-- header 对齐官方分类页：只报数量，返回靠路由、刷新靠拖拽后的自动回写 -->
+      <template #header>
+        <div class="list-header">
+          <span class="list-header__title">共 {{ categories.length }} 个分类</span>
+        </div>
+      </template>
       <VLoading v-if="loading" />
-      <Transition v-else-if="categories.length === 0" appear name="fade">
+      <Transition v-else-if="!categories.length" appear name="fade">
         <VEmpty title="暂无分类" message="创建分类（如 技术分享、问答、公告）来组织帖子">
           <template #actions>
-            <VButton type="secondary" @click="openCreate">
-              <template #icon><IconAddCircle /></template>
-              新建分类
-            </VButton>
+            <VButton type="secondary" @click="openCreate">新建分类</VButton>
           </template>
         </VEmpty>
       </Transition>
       <Transition v-else appear name="fade">
-        <VEntityContainer>
-          <VEntity
-            v-for="(category, index) in categories"
-            :key="category.name"
-            class="category-row"
-            :class="{
-              'category-row--dragging': dragIndex === index,
-              'category-row--child': !!category.parentName,
-            }"
-            :draggable="canDrag"
-            @dragstart="onDragStart(index)"
-            @dragover.prevent
-            @drop.prevent="onDrop(index)"
-            @dragend="onDragEnd"
-          >
-            <template #start>
-              <VEntityField v-if="category.parentName">
-                <template #description>
-                  <span class="category-branch">└</span>
-                </template>
-              </VEntityField>
-              <VEntityField>
-                <template #description>
-                  <span
-                    class="category-tile"
-                    :class="{ 'category-tile--muted': !category.color }"
-                    :style="
-                      category.color
-                        ? {
-                            background: category.color + '1a',
-                            color: category.color,
-                          }
-                        : undefined
-                    "
-                  >
-                    <!-- 优先离线 SVG（保存时解析），回退 Iconify 在线组件，最后色点/占位 -->
-                    <span
-                      v-if="category.iconSvg"
-                      class="category-tile__svg"
-                      v-html="category.iconSvg"
-                    ></span>
-                    <Icon
-                      v-else-if="category.icon"
-                      :icon="category.icon"
-                      class="category-tile__icon"
-                    />
-                    <span
-                      v-else-if="category.color"
-                      class="category-tile__dot"
-                      :style="{ background: category.color }"
-                    ></span>
-                    <span v-else class="category-tile__placeholder">—</span>
-                  </span>
-                </template>
-              </VEntityField>
-              <VEntityField :title="category.displayName" :description="category.description">
-                <template #extra>
-                  <span class="category-slug">/{{ category.slug }}</span>
-                </template>
-              </VEntityField>
-            </template>
-            <template #end>
-              <VEntityField width="8rem">
-                <template #description>
-                  <span class="category-count">
-                    {{ category.postCount || 0 }} 篇帖子<template
-                      v-if="!category.parentName && (category.totalPostCount || 0) > (category.postCount || 0)"
-                    >（含子分类 {{ category.totalPostCount }}）</template>
-                  </span>
-                </template>
-              </VEntityField>
-              <VEntityField width="5rem">
-                <template #description>
-                  <VStatusDot
-                    v-if="category.enabled !== false"
-                    state="success"
-                    text="已启用"
-                  />
-                  <VStatusDot v-else state="default" text="已停用" />
-                </template>
-              </VEntityField>
-            </template>
-            <template #dropdownItems>
-              <VDropdownItem @click="openEdit(category)">编辑</VDropdownItem>
-              <VDropdownItem type="danger" @click="onDelete(category)">删除</VDropdownItem>
-            </template>
-          </VEntity>
-        </VEntityContainer>
+        <Draggable
+          v-model="categoriesTree"
+          :class="{ 'is-dragging': positionUpdating }"
+          :disable-drag="positionUpdating"
+          trigger-class="drag-element"
+          :indent="40"
+          @after-drop="handleUpdatePosition"
+        >
+          <template #default="{ node }">
+            <CategoryListItem
+              :category-tree-node="node"
+              @edit="openEdit(node)"
+              @create-by-parent="openCreateByParent(node)"
+              @saved="fetchCategories"
+            />
+          </template>
+        </Draggable>
       </Transition>
     </VCard>
   </div>
@@ -265,92 +255,46 @@ onMounted(fetchCategories)
   <CategoryEditingModal
     v-if="modalVisible"
     :category="editingCategory"
+    :parent-category="creatingByParent"
     @saved="fetchCategories"
     @close="modalVisible = false"
   />
 </template>
 
 <style scoped>
-.header-icon {
-  margin-right: 0.5rem;
-  align-self: center;
-}
-
-.page-body {
-  margin: 0;
-}
-
-@media (min-width: 768px) {
-  .page-body {
-    margin: 1rem;
-  }
-}
-
-.category-tile {
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 8px;
-  font-size: 1rem;
-}
-
-.category-tile--muted {
+/* bbs-header-icon / bbs-page-body 见 styles/tokens.css */
+.list-header {
+  display: flex;
+  width: 100%;
+  align-items: center;
   background: var(--bbs-bg-soft);
-  color: var(--bbs-text-muted);
+  padding: 0.75rem 1rem;
+}
+.list-header__title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--bbs-text);
 }
 
-.category-tile__svg {
-  display: inline-flex;
+/* @he-tree 内部：分隔线 + 拖拽占位（对标官方） */
+:deep(.vtlist-inner) {
+  display: flex;
+  flex-direction: column;
 }
-
-.category-tile__svg :deep(svg) {
-  width: 1rem;
-  height: 1rem;
+:deep(.vtlist-inner > *) {
+  border-top: 1px solid var(--bbs-border);
 }
-
-.category-tile__icon {
-  width: 1rem;
-  height: 1rem;
+:deep(.vtlist-inner > *:first-child) {
+  border-top: 0;
 }
-
-.category-tile__dot {
-  width: 0.75rem;
-  height: 0.75rem;
-  border-radius: 4px;
+:deep(.he-tree-drag-placeholder) {
+  box-sizing: border-box;
+  height: 48px;
+  border: 1px dashed var(--bbs-accent);
+  background: var(--bbs-bg-soft);
 }
-
-.category-tile__placeholder {
-  font-size: 0.75rem;
-  color: var(--bbs-text-muted);
-}
-
-.category-slug {
-  margin-left: 0.375rem;
-  font-size: 0.75rem;
-  color: var(--bbs-text-faint);
-}
-
-.category-count {
-  font-size: 0.75rem;
-  color: var(--bbs-text-muted);
-}
-
-.category-row {
-  cursor: grab;
-}
-
-.category-row--dragging {
-  opacity: 0.5;
-}
-
-/* 子分类：缩进 + 分支符（后端返回树序平铺，父行在前、子行紧随） */
-.category-row--child {
-  padding-left: 1.25rem;
-}
-
-.category-branch {
-  color: var(--bbs-text-faint);
-  font-size: 0.875rem;
+.is-dragging {
+  opacity: 0.6;
+  cursor: progress;
 }
 </style>

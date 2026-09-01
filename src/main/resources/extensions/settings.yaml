@@ -29,12 +29,18 @@ spec:
             - $formkit: text
               name: slogan
               label: 社区副标题
-              help: 展示在 Hero 标题下方，并用作列表页 meta description
+              help: Hero、浏览器标题与 SEO 描述
               value: ""
+            - $formkit: text
+              name: titleSeparator
+              label: 标题分隔符
+              help: 浏览器标题如「BBS 社区 - 副标题」
+              value: "-"
             - $formkit: color
               name: accentColor
               label: 前台主题色
-              help: 顶栏、Hero、按钮、置顶徽标等
+              format: hex8
+              help: 顶栏、Hero、按钮与置顶徽标
               value: "#4d698e"
 
         - $formkit: group
@@ -66,12 +72,6 @@ spec:
               accepts:
                 - "image/*"
               value: ""
-            - $formkit: switch
-              if: "$get(show_hero).value === true"
-              name: showStats
-              label: 显示统计信息
-              help: 在 Hero 区显示帖子数与分类数
-              value: true
 
         - $formkit: group
           name: seo
@@ -103,19 +103,21 @@ spec:
             - $formkit: switch
               name: listShowExcerpt
               label: 列表显示摘要
-              help: 在标题下方展示摘要（单行截断）
+              help: 在标题下方展示摘要（最多两行）
               value: false
             - $formkit: select
               name: dateFormat
               label: 时间显示格式
               help: 列表与详情的时间格式
-              value: "yyyy-MM-dd"
+              value: "relative"
               options:
-                - label: 2026-07-30
+                - label: 相对时间
+                  value: "relative"
+                - label: yyyy-MM-dd
                   value: "yyyy-MM-dd"
-                - label: 2026-07-30 14:30
+                - label: yyyy-MM-dd HH:mm
                   value: "yyyy-MM-dd HH:mm"
-                - label: 07-30
+                - label: MM-dd
                   value: "MM-dd"
 
         - $formkit: group
@@ -149,7 +151,7 @@ spec:
             - $formkit: switch
               name: enableToc
               label: 显示正文目录
-              help: 正文 h2/h3 不少于 3 个时自动生成
+              help: 正文 h2/h3 满 3 个时生成
               value: true
 
         - $formkit: group
@@ -159,7 +161,7 @@ spec:
             - $formkit: number
               name: rssSize
               label: RSS 条目数
-              help: 需先安装 plugin-feed；控制 /feed/bbs/posts.xml 的条目数
+              help: 需先安装 plugin-feed
               value: 20
               min: 1
               max: 100
@@ -192,7 +194,7 @@ spec:
               name: requireReview
               id: require_review
               label: 用户发帖需审核
-              help: 开启后用户中心发帖须审核通过才展示；后台发布不受影响
+              help: 用户中心发帖须审核后展示
               value: false
             - $formkit: switch
               if: "$get(require_review).value === true"
@@ -202,19 +204,29 @@ spec:
               value: true
 
     # ------------------------------------------------------------------
-    # 集成：互动增强（字段少，无需再嵌 group）
+    # 集成：互动增强 / 作者链接
     # ------------------------------------------------------------------
     - group: integration
       label: 集成
       formSchema:
-        - $formkit: switch
-          name: enableInteractionPlus
-          id: enable_interaction_plus
-          label: 接入互动增强
-          help: 需先启用 interaction-plus。开启后展示装扮，作者链接优先用其用户卡跳转
-          value: false
+        - $formkit: group
+          name: interaction
+          label: 互动增强
+          children:
+            - $formkit: switch
+              name: enableInteractionPlus
+              id: enable_interaction_plus
+              label: 接入互动增强
+              help: 需启用 interaction-plus
+              value: false
+            - $formkit: switch
+              if: "$get(enable_interaction_plus).value === true"
+              name: listDecoration
+              label: 列表页用户装扮
+              help: 显示头像框、昵称样式与身份标识
+              value: false
         - $formkit: text
           name: authorLinkTemplate
           label: 作者链接模板
-          help: "{name} 替换为用户名；留空则作者名不跳转"
+          help: "{name} 替换为用户名，留空不跳转"
           value: "/authors/{name}"

@@ -1,5 +1,5 @@
 import { definePlugin } from '@halo-dev/ui-shared'
-import type { CommentSubjectRefProvider } from '@halo-dev/ui-shared'
+import type { CommentSubjectRefProvider, RouteRecordAppend } from '@halo-dev/ui-shared'
 import type { Extension } from '@halo-dev/api-client'
 import { consoleRoutes } from '@/console/routes'
 import { ucRoutes } from '@/uc/routes'
@@ -8,8 +8,10 @@ import '@/styles/tokens.css'
 
 export default definePlugin({
   components: {},
-  routes: consoleRoutes,
-  ucRoutes,
+  // 两种路由形态混挂（根布局子路由 + 独立顶层路由），运行时按条分派；
+  // 官方类型只允许纯数组二选一，见 routes.ts 头部说明
+  routes: consoleRoutes as RouteRecordAppend[],
+  ucRoutes: ucRoutes as RouteRecordAppend[],
   extensionPoints: {
     // 让 Halo 评论管理后台识别 BBS 帖子评论的来源（标签 + 标题 + 跳转）。
     // 评论列表（CommentListItem）走前端 useSubjectRef，内置只认 Post/SinglePage

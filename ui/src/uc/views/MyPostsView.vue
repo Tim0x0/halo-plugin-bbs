@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { refDebounced } from '@vueuse/core'
 import { useRouter } from 'vue-router'
-import { utils } from '@halo-dev/ui-shared'
 import {
   VPageHeader,
   VButton,
@@ -13,21 +13,31 @@ import {
   VEntityContainer,
   VEntity,
   VEntityField,
-  VStatusDot,
   VDropdownItem,
   VDropdownDivider,
   Toast,
   Dialog,
   IconAddCircle,
   IconRefreshLine,
-  IconExternalLinkLine,
 } from '@halo-dev/components'
 import RiMegaphoneLine from '~icons/ri/megaphone-line'
-import RiChat1Line from '~icons/ri/chat-1-line'
-import { axiosInstance } from '@halo-dev/api-client'
-import { ucApi } from '@/api/bbs'
-import { defaultPostForm, type BbsPostVo } from '@/types/bbs'
+import { publicApi, ucApi } from '@/api/bbs'
+import { useRouteQuery } from '@vueuse/router'
+import { BBS_PHASE_LABELS, BBS_TYPE_LABELS } from '@/utils/post-labels'
+import { formatTime, timeAgo } from '@/utils/date'
+import {
+  defaultPostForm,
+  postFormFrom,
+  type BbsPostVo,
+  type CategoryVo,
+} from '@/types/bbs'
 import PostSettingModal from '@/console/components/PostSettingModal.vue'
+import CategoryFilterDropdown from '@/console/components/CategoryFilterDropdown.vue'
+import PostEntityStart from '@/shared/PostEntityStart.vue'
+import PostStatusEnd from '@/shared/PostStatusEnd.vue'
+import PostCommentsField from '@/shared/PostCommentsField.vue'
+import PostLockField from '@/shared/PostLockField.vue'
+import PostModerationRecords from '@/shared/PostModerationRecords.vue'
 
 /**
  * UC「我的帖子」：登录用户管理自己发布的帖子（发帖 / 编辑 / 删除）。
@@ -37,98 +47,122 @@ const router = useRouter()
 const loading = ref(false)
 const posts = ref<BbsPostVo[]>([])
 const total = ref(0)
-const page = ref(1)
-const size = ref(20)
-const keyword = ref('')
-const phaseFilter = ref<string>()
-const categoryFilter = ref<string>()
-const typeFilter = ref<string>()
+// 筛选与分页挂到 URL（同 Console 列表）
+const filters = reactive({
+  page: useRouteQuery<number>('page', 1, { transform: Number }),
+  size: useRouteQuery<number>('size', 20, { transform: Number }),
+  keyword: useRouteQuery<string>('keyword', ''),
+  phase: useRouteQuery<string | undefined>('phase'),
+  category: useRouteQuery<string | undefined>('category'),
+  type: useRouteQuery<string | undefined>('type'),
+})
 
-// 设置弹窗的分类选项：走公开接口（UC 用户无 Console 权限）
-const categoryOptions = ref<{ label: string; value: string }[]>([])
+// 分类数据走公开接口（UC 用户无 Console 权限），同时供筛选下拉与设置弹窗使用
+const categories = ref<CategoryVo[]>([])
 
 async function fetchCategories() {
   try {
-    const { data } = await axiosInstance.get<
-      { name: string; displayName: string; parent?: { displayName: string } }[]
-    >('/apis/api.bbs.timxs.com/v1alpha1/categories')
-    // 子分类 label 带父级前缀便于辨识
-    categoryOptions.value = data.map((c) => ({
-      label: c.parent ? `${c.parent.displayName} / ${c.displayName}` : c.displayName,
-      value: c.name,
-    }))
-  } catch {
-    /* 忽略：分类加载失败不阻塞列表 */
+    const { data } = await publicApi.listCategories()
+    categories.value = data || []
+  } catch (error) {
+    // 分类加载失败不阻塞列表；但把错误打到控制台——空 catch 会把同步异常一并吞掉且
+    // 无任何痕迹，历史上曾因此掩盖过一个首屏空列表 bug。
+    console.error('[bbs] 分类加载失败', error)
   }
 }
 
 const phaseItems = computed(() => [
   { label: '全部', value: undefined },
-  { label: '已发布', value: 'PUBLISHED' },
-  { label: '待审核', value: 'PENDING' },
-  { label: '已驳回', value: 'REJECTED' },
-  { label: '草稿', value: 'DRAFT' },
+  ...Object.entries(BBS_PHASE_LABELS).map(([value, label]) => ({ label, value })),
 ])
 
+// UC 用户不能发公告，类型筛选不含 ANNOUNCEMENT
 const typeItems = computed(() => [
   { label: '全部', value: undefined },
-  { label: '讨论', value: 'POST' },
-  { label: '问答', value: 'QUESTION' },
-])
-
-const categoryItems = computed(() => [
-  { label: '全部', value: undefined },
-  ...categoryOptions.value.map((c) => ({ label: c.label, value: c.value })),
+  ...Object.entries(BBS_TYPE_LABELS)
+    .filter(([value]) => value !== 'ANNOUNCEMENT')
+    .map(([value, label]) => ({ label, value })),
 ])
 
 const hasFilters = computed(
-  () => !!phaseFilter.value || !!categoryFilter.value || !!typeFilter.value || !!keyword.value
+  () => !!filters.phase || !!filters.category || !!filters.type || !!filters.keyword
 )
 
 function resetFilters() {
-  phaseFilter.value = undefined
-  categoryFilter.value = undefined
-  typeFilter.value = undefined
-  keyword.value = ''
+  filters.phase = undefined
+  filters.category = undefined
+  filters.type = undefined
+  filters.keyword = ''
 }
 
+const keywordDebounced = refDebounced(
+  computed(() => filters.keyword),
+  300
+)
+let fetchSeq = 0
+
 async function fetchPosts() {
+  const seq = ++fetchSeq
   loading.value = true
   try {
     const { data } = await ucApi.listMine({
-      page: page.value,
-      size: size.value,
-      keyword: keyword.value.trim() || undefined,
-      phase: phaseFilter.value,
-      categoryName: categoryFilter.value,
-      type: typeFilter.value,
+      page: filters.page,
+      size: filters.size,
+      keyword: (keywordDebounced.value || '').trim() || undefined,
+      phase: filters.phase,
+      categoryName: filters.category,
+      type: filters.type,
     })
+    if (seq !== fetchSeq) {
+      return
+    }
     posts.value = data.items || []
     total.value = data.total || 0
-  } catch {
-    /* 请求错误由全局拦截器提示 */
+  } catch (error) {
+    // HTTP 错误由全局拦截器提示；这里再把错误打到控制台——空 catch 会把拼参数时的
+    // 同步异常一并吞掉，历史上曾因此掩盖过一个首屏空列表 bug。
+    console.error('[bbs] 我的帖子加载失败', error)
   } finally {
-    loading.value = false
+    if (seq === fetchSeq) {
+      loading.value = false
+    }
   }
 }
 
-function applyFilter() {
-  page.value = 1
-  fetchPosts()
-}
+// 筛选变化回到第 1 页；随后的统一 watch 只发一次请求
+watch(
+  () => [keywordDebounced.value, filters.phase, filters.category, filters.type],
+  () => {
+    filters.page = 1
+  }
+)
 
-watch([keyword, phaseFilter, categoryFilter, typeFilter], applyFilter)
+// 唯一的请求入口（VPagination 因此不再单独绑 @change，否则翻页触发两次）
+watch(
+  () => [
+    filters.page,
+    filters.size,
+    keywordDebounced.value,
+    filters.phase,
+    filters.category,
+    filters.type,
+  ],
+  fetchPosts,
+  { immediate: true }
+)
 
 function toEditor(name?: string) {
   router.push({ name: 'BbsUcPostEditor', query: name ? { name } : {} })
 }
 
 // 快捷设置弹窗（对齐官方 UC 文章列表）：改分类/别名/摘要，不动正文；
-// UC 更新接口是全量提交，先取回正文一并回传
+// 所有“保存”只更新工作稿，已发布帖不会因此改变前台版本。
 const settingVisible = ref(false)
 const settingPost = ref<BbsPostVo | null>(null)
 const settingForm = ref(defaultPostForm())
 const settingSaving = ref(false)
+/** 审核记录弹窗的目标帖名；审核留痕从编辑器挪到列表行下拉后的唯一入口 */
+const moderationName = ref('')
 
 async function openSetting(post: BbsPostVo) {
   if (post.locked) {
@@ -138,19 +172,8 @@ async function openSetting(post: BbsPostVo) {
   try {
     const { data } = await ucApi.getMine(post.name)
     settingPost.value = post
-    settingForm.value = {
-      title: data.title,
-      slug: data.slug || '',
-      // 回填真实类型（讨论 / 问答可互改；公告在表单中锁定展示）
-      type: data.type || 'POST',
-      categoryName: data.category?.name || '',
-      autoExcerpt: !data.excerpt,
-      excerpt: data.excerpt || '',
-      content: data.content || '',
-      allowComment: data.allowComment !== false,
-      pinned: false,
-      pinPriority: 0,
-    }
+    // 回填真实类型（讨论 / 问答可互改；公告在表单中锁定展示）；UC 侧无置顶特权
+    settingForm.value = postFormFrom(data, { managed: false })
     settingVisible.value = true
   } catch {
     /* 请求错误由全局拦截器提示 */
@@ -159,18 +182,19 @@ async function openSetting(post: BbsPostVo) {
 
 async function saveSetting() {
   const f = settingForm.value
+  const post = settingPost.value!
   settingSaving.value = true
   try {
-    const { data } = await ucApi.update(settingPost.value!.name, {
+    const body = {
       title: f.title,
       slug: f.slug,
       type: f.type,
       categoryName: f.categoryName,
-      excerpt: f.autoExcerpt ? '' : f.excerpt,
-      content: f.content,
-      allowComment: f.allowComment,
-    })
-    Toast.success(data.spec?.phase === 'PENDING' ? '已保存，等待管理员审核' : '已保存')
+      excerpt: f.excerpt,
+      autoExcerpt: f.autoExcerpt,
+    }
+    await ucApi.saveDraft(post.name, body)
+    Toast.success('保存成功')
     settingVisible.value = false
     await fetchPosts()
   } catch {
@@ -207,7 +231,7 @@ function toEditorGuarded(post: BbsPostVo) {
 function onDelete(post: BbsPostVo) {
   Dialog.warning({
     title: '删除帖子',
-    description: `确定删除「${post.title}」吗？该操作不可恢复。`,
+    description: `确定删除「${post.title}」吗？将移入回收站，管理员可恢复。`,
     confirmType: 'danger',
     onConfirm: async () => {
       try {
@@ -221,24 +245,15 @@ function onDelete(post: BbsPostVo) {
   })
 }
 
-function formatTime(value?: string) {
-  return value ? utils.date.format(value) : ''
-}
-
-function timeAgo(value?: string) {
-  return value ? utils.date.timeAgo(value) : '—'
-}
-
 onMounted(() => {
   fetchCategories()
-  fetchPosts()
 })
 </script>
 
 <template>
   <VPageHeader title="我的帖子">
     <template #icon>
-      <RiMegaphoneLine class="header-icon" />
+      <RiMegaphoneLine class="bbs-header-icon" />
     </template>
     <template #actions>
       <VButton type="secondary" @click="toEditor()">
@@ -248,22 +263,26 @@ onMounted(() => {
     </template>
   </VPageHeader>
 
-  <div class="page-body">
+  <div class="bbs-page-body">
     <VCard :body-class="['!p-0']">
       <template #header>
         <div class="list-toolbar">
           <div class="list-toolbar__main">
-            <SearchInput v-model="keyword" placeholder="搜索标题" />
+            <SearchInput v-model="filters.keyword" placeholder="搜索标题" />
           </div>
           <VSpace spacing="lg" class="list-toolbar__filters">
             <FilterCleanButton v-if="hasFilters" @click="resetFilters" />
-            <FilterDropdown v-model="phaseFilter" label="状态" :items="phaseItems" />
-            <FilterDropdown v-model="typeFilter" label="类型" :items="typeItems" />
-            <FilterDropdown v-model="categoryFilter" label="分类" :items="categoryItems" />
-            <div v-tooltip="'刷新'" class="refresh-btn" @click="fetchPosts">
+            <FilterDropdown v-model="filters.phase" label="状态" :items="phaseItems" />
+            <FilterDropdown v-model="filters.type" label="类型" :items="typeItems" />
+            <CategoryFilterDropdown
+              v-model="filters.category"
+              label="分类"
+              :categories="categories"
+            />
+            <div v-tooltip="'刷新'" class="bbs-refresh-btn" @click="fetchPosts">
               <IconRefreshLine
-                class="refresh-btn__icon"
-                :class="{ 'refresh-btn__icon--spin': loading }"
+                class="bbs-refresh-btn__icon"
+                :class="{ 'bbs-refresh-btn__icon--spin': loading }"
               />
             </div>
           </VSpace>
@@ -272,7 +291,7 @@ onMounted(() => {
 
       <VLoading v-if="loading" />
       <Transition v-else-if="posts.length === 0" appear name="fade">
-        <VEmpty title="还没有帖子" message="发布你的第一篇帖子，与大家分享内容">
+        <VEmpty title="还没有帖子" message="保存或提交你的第一篇帖子">
           <template #actions>
             <VButton type="secondary" @click="toEditor()">
               <template #icon><IconAddCircle /></template>
@@ -285,103 +304,26 @@ onMounted(() => {
         <VEntityContainer>
           <VEntity v-for="post in posts" :key="post.name">
             <template #start>
-              <VEntityField :title="post.title" max-width="30rem">
-                <template #extra>
-                  <a
-                    v-if="post.phase === 'PUBLISHED'"
-                    target="_blank"
-                    :href="post.permalink"
-                    class="entity-permalink"
-                    @click.stop
-                  >
-                    <IconExternalLinkLine class="entity-permalink__icon" />
-                  </a>
-                </template>
-                <template #description>
-                  <div class="entity-meta">
-                    <!-- 固定槽位：分类（子分类带父级前缀；无分类显示占位），保证各行左缘对齐 -->
-                    <span v-if="post.category" class="entity-category">
-                      <span
-                        class="entity-category__dot"
-                        :style="{ background: post.category.color || '#9ca3af' }"
-                      ></span>
-                      {{
-                        post.category.parent
-                          ? `${post.category.parent.displayName} / ${post.category.displayName}`
-                          : post.category.displayName
-                      }}
-                    </span>
-                    <span v-else class="entity-category entity-category--none">
-                      <span class="entity-category__dot"></span>
-                      未分类
-                    </span>
-                    <!-- 条件展示：徽标 / 摘要 / 驳回原因 -->
-                    <span
-                      v-if="post.type === 'ANNOUNCEMENT'"
-                      class="bbs-badge bbs-badge--announcement"
-                    >
-                      公告
-                    </span>
-                    <span
-                      v-if="post.type === 'QUESTION' && !post.solved"
-                      class="bbs-badge bbs-badge--question"
-                    >
-                      问答
-                    </span>
-                    <span
-                      v-if="post.type === 'QUESTION' && post.solved"
-                      class="bbs-badge bbs-badge--solved"
-                    >
-                      已解决
-                    </span>
-                    <span v-if="post.pinned" class="bbs-badge bbs-badge--pinned">置顶</span>
-                    <span v-if="post.locked" class="bbs-badge bbs-badge--locked">锁定</span>
-                    <span
-                      v-if="post.phase === 'REJECTED' && post.rejectReason"
-                      class="entity-reject"
-                    >
-                      驳回原因：{{ post.rejectReason }}
-                    </span>
-                  </div>
-                </template>
-              </VEntityField>
+              <!-- 标题点击进编辑器（对齐 console 列表）；锁定帖作者不可编辑，不给路由。
+                   驳回原因不占行面：完整留痕在审核记录弹窗（行下拉菜单），状态列悬停可见 -->
+              <PostEntityStart
+                :post="post"
+                :title-route="
+                  post.locked
+                    ? undefined
+                    : { name: 'BbsUcPostEditor', query: { name: post.name } }
+                "
+              />
             </template>
             <template #end>
-              <VEntityField width="3.5rem">
-                <template #description>
-                  <span v-tooltip="'评论数'" class="entity-comments">
-                    <RiChat1Line class="entity-comments__icon" />
-                    {{ post.commentCount ?? 0 }}
-                  </span>
-                </template>
-              </VEntityField>
-              <VEntityField width="5rem">
-                <template #description>
-                  <VStatusDot
-                    v-if="post.phase === 'PUBLISHED'"
-                    state="success"
-                    text="已发布"
-                  />
-                  <VStatusDot
-                    v-else-if="post.phase === 'PENDING'"
-                    state="warning"
-                    text="待审核"
-                    animate
-                  />
-                  <VStatusDot
-                    v-else-if="post.phase === 'REJECTED'"
-                    v-tooltip="post.rejectReason ? `驳回原因：${post.rejectReason}` : ''"
-                    state="error"
-                    text="已驳回"
-                  />
-                  <VStatusDot v-else state="default" text="草稿" />
-                </template>
-              </VEntityField>
+              <PostCommentsField :count="post.commentsCount" />
+              <PostLockField :post="post" readonly />
+              <PostStatusEnd :post="post" />
               <VEntityField width="7rem">
                 <template #description>
                   <span
                     v-tooltip="formatTime(post.publishTime || post.creationTimestamp)"
-                    class="entity-meta"
+                    class="bbs-entity-time"
                   >
                     {{ timeAgo(post.publishTime || post.creationTimestamp) }}
                   </span>
@@ -395,6 +337,7 @@ onMounted(() => {
               <VDropdownItem :disabled="post.locked" @click="openSetting(post)">
                 设置
               </VDropdownItem>
+              <VDropdownItem @click="moderationName = post.name">审核记录</VDropdownItem>
               <VDropdownItem
                 v-if="post.type === 'QUESTION' && !post.locked"
                 @click="toggleSolved(post)"
@@ -412,11 +355,10 @@ onMounted(() => {
 
       <template #footer>
         <VPagination
-          v-model:page="page"
-          v-model:size="size"
+          v-model:page="filters.page"
+          v-model:size="filters.size"
           :total="total"
           :size-options="[20, 30, 50]"
-          @change="fetchPosts"
         />
       </template>
     </VCard>
@@ -425,30 +367,25 @@ onMounted(() => {
   <PostSettingModal
     v-if="settingVisible"
     v-model="settingForm"
-    :categories="categoryOptions"
+    :categories="categories"
     :managed="false"
+    :post-name="settingPost?.name"
     :saving="settingSaving"
     @confirm="saveSetting"
     @close="settingVisible = false"
   />
+
+  <!-- 审核记录：唯一入口在行下拉菜单（编辑器不再挂此按钮） -->
+  <PostModerationRecords
+    v-if="moderationName"
+    :post-name="moderationName"
+    mode="uc"
+    @close="moderationName = ''"
+  />
 </template>
 
 <style scoped>
-.header-icon {
-  margin-right: 0.5rem;
-  align-self: center;
-}
-
-.page-body {
-  margin: 0;
-}
-
-@media (min-width: 768px) {
-  .page-body {
-    margin: 1rem;
-  }
-}
-
+/* bbs-header-icon / bbs-page-body / bbs-refresh-btn / bbs-entity-time 见 styles/tokens.css */
 .list-toolbar {
   display: flex;
   width: 100%;
@@ -467,138 +404,5 @@ onMounted(() => {
 
 .list-toolbar__filters {
   flex-wrap: wrap;
-}
-
-.refresh-btn {
-  display: flex;
-  cursor: pointer;
-  align-items: center;
-  border-radius: var(--bbs-radius);
-  padding: 0.25rem;
-  transition: var(--bbs-transition);
-}
-
-.refresh-btn:hover {
-  background: var(--bbs-bg-selected);
-}
-
-.refresh-btn__icon {
-  height: 1rem;
-  width: 1rem;
-  color: var(--bbs-text-muted);
-}
-
-.refresh-btn__icon--spin {
-  animation: bbs-spin 1s linear infinite;
-  color: var(--bbs-text);
-}
-
-@keyframes bbs-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.entity-permalink {
-  margin-left: 0.25rem;
-  display: inline-flex;
-  color: var(--bbs-text-faint);
-  transition: var(--bbs-transition);
-}
-
-.entity-permalink:hover {
-  color: var(--bbs-text);
-}
-
-.entity-permalink__icon {
-  height: 0.875rem;
-  width: 0.875rem;
-}
-
-.entity-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.625rem;
-  font-size: 0.75rem;
-  color: var(--bbs-text-muted);
-}
-
-.entity-category {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex: none;
-}
-
-.entity-category__dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 2px;
-  flex: none;
-  background: var(--bbs-border);
-}
-
-.entity-category--none {
-  color: var(--bbs-text-faint);
-}
-
-.entity-comments {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--bbs-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.entity-comments__icon {
-  width: 0.875rem;
-  height: 0.875rem;
-  color: var(--bbs-text-faint);
-}
-
-.bbs-badge {
-  border-radius: var(--bbs-radius);
-  padding: 0.125rem 0.375rem;
-  font-weight: 500;
-  flex: none;
-}
-
-.bbs-badge--announcement {
-  background: var(--bbs-warning-bg);
-  color: var(--bbs-warning);
-}
-
-.bbs-badge--pinned {
-  background: var(--bbs-accent-bg);
-  color: var(--bbs-accent);
-}
-
-.bbs-badge--question {
-  background: rgba(59, 130, 196, 0.12);
-  color: #3b82c4;
-}
-
-.bbs-badge--solved {
-  background: rgba(46, 158, 91, 0.12);
-  color: #2e9e5b;
-}
-
-.bbs-badge--locked {
-  background: var(--bbs-bg-soft);
-  color: var(--bbs-text-muted);
-}
-
-.entity-reject {
-  color: var(--bbs-danger);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
 }
 </style>
