@@ -728,7 +728,7 @@ onMounted(() => {
                     <VDropdownItem v-if="selectionHas.draft" @click="batchPublish">
                       发布
                     </VDropdownItem>
-                    <VDropdownItem v-if="selectionHas.published" @click="batchUnpublish">
+                    <VDropdownItem v-if="selectionHas.published" type="danger" @click="batchUnpublish">
                       取消发布
                     </VDropdownItem>
                     <VDropdownItem @click="batchCategoryVisible = true">设置分类</VDropdownItem>
@@ -928,7 +928,7 @@ onMounted(() => {
                 >
                   发布
                 </VDropdownItem>
-                <VDropdownItem @click="doAction(post.name, 'unpublish', '已取消发布')">
+                <VDropdownItem type="danger" @click="doAction(post.name, 'unpublish', '已取消发布')">
                   取消发布
                 </VDropdownItem>
               </template>

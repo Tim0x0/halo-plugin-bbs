@@ -498,6 +498,12 @@ async function onSubmit() {
 
 <style scoped>
 /* bbs-setting-grid / bbs-slug-refresh 系列见 styles/tokens.css */
+/* 字段间纵向节奏由 FormKit outer 的 py-4（首尾裁掉）承担；分类色的标签是自绘的，
+   不在 FormKit outer 里，上下节奏要自己补，否则标题贴着上方分隔线 */
+.color-field {
+  padding: 1rem 0;
+}
+
 .color-field :deep(.formkit-wrapper) {
   padding-top: 0.25rem;
 }
