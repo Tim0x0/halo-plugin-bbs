@@ -83,7 +83,7 @@ public class BbsPlugin extends BasePlugin {
                             ? null : enumName(p.getSpec().getDraft().getPhase())));
             indexSpecs.add(IndexSpecs.<BbsPost, Instant>single("spec.publishTime", Instant.class)
                     .indexFunc(p -> p.getSpec().getPublishTime()));
-            // 最后活跃时间：老数据无该字段时回退发布时间，保证「最后活跃」排序无需迁移
+            // 最后活跃时间：字段缺失时回退发布时间，「最后活跃」排序始终可用
             indexSpecs.add(IndexSpecs.<BbsPost, Instant>single(
                             "spec.lastActivityTime", Instant.class)
                     .indexFunc(p -> p.getSpec().getLastActivityTime() != null

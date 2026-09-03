@@ -133,7 +133,7 @@ async function fetchSnapshots(silent = false) {
     snapshots.value = response.data || []
   } catch (error) {
     // HTTP 错误由全局拦截器提示；这里再把错误打到控制台——空 catch 会把同步异常一并
-    // 吞掉且无任何痕迹，历史上曾因此掩盖过一个首屏空列表 bug。
+    // 吞掉且无任何痕迹。
     console.error('[bbs] 快照列表加载失败', error)
     const status = (error as { response?: { status?: number } })?.response?.status
     if (status === 404 || status === 403) {
@@ -243,7 +243,7 @@ async function refreshContent() {
     diffContent.value = DOMPurify.sanitize(wrapper.innerHTML)
   } catch (error) {
     // HTTP 错误由全局拦截器提示；这里再把错误打到控制台——空 catch 会把同步异常一并
-    // 吞掉且无任何痕迹，历史上曾因此掩盖过一个首屏空列表 bug。
+    // 吞掉且无任何痕迹。
     console.error('[bbs] 快照内容加载失败', error)
   } finally {
     if (requestId === contentRequestId) {

@@ -238,7 +238,7 @@ public class BbsQueryService {
         var timeOrders = new ArrayList<Sort.Order>();
         if (SORT_HOT.equals(sort)) {
             // 评论数已由调和器落在 status 并建了索引，热门可直接走数据库排序 + 分页：
-            // 旧帖不再被扫描窗口挡在排名之外，total 也回到真实总数
+            // 全部帖子参与排名（无扫描窗口），total 为真实总数
             timeOrders.add(Sort.Order.desc("status.commentsCount"));
             timeOrders.add(Sort.Order.desc("spec.publishTime"));
         } else if (SORT_LATEST.equals(sort)) {
@@ -618,7 +618,7 @@ public class BbsQueryService {
         if (StringUtils.isBlank(postName)) {
             return Mono.just(ListResult.emptyResult());
         }
-        // 先确认帖仍公开（已发布、未软删、未打删除戳）；回收 / 撤下后历史评论不再对外
+        // 先确认帖仍公开（已发布、未软删、未打删除戳）；回收 / 撤下后历史评论不对外
         return requirePublicPost(postName)
                 .flatMap(ignored -> doListRoComments(postName, page, size, replySize))
                 .defaultIfEmpty(ListResult.emptyResult());
@@ -989,7 +989,7 @@ public class BbsQueryService {
             builder.fieldQuery(or(equal("spec.enabled", true), isNull("spec.enabled")));
         }
         // 计数由调和器维护在 status 里，这里一次查询取回全部分类即可——
-        // 不再为每个分类各发一次 countBy
+        // 不为每个分类各发一次 countBy
         return client.listAll(BbsCategory.class, builder.build(), CATEGORY_SORT)
                 .collectList()
                 .map(BbsQueryService::assembleCategoryVos);
@@ -1001,7 +1001,7 @@ public class BbsQueryService {
                 c -> c.getMetadata().getName(), Function.identity(), (a, b) -> a));
         var vos = cats.stream().map(cat -> {
             var vo = toCategoryVo(cat, dict);
-            // 前台口径取已发布数；含子分类的合计在下面按树聚合（纯内存，不再查询）
+            // 前台口径取已发布数；含子分类的合计在下面按树聚合（纯内存，不查询）
             var status = cat.getStatus();
             long count = status == null || status.getVisiblePostCount() == null
                     ? 0L : status.getVisiblePostCount();
@@ -1104,7 +1104,7 @@ public class BbsQueryService {
         var categoriesMono = fetchCategoryDict();
         var usersMono = fetchMapByNames(User.class, userNames);
         var contentsMono = contentService.resolveContents(posts, editing);
-        // 评论数已由调和器维护在 status 里，不再逐帖 countBy（原本一页 20 条 = 20 次查询）
+        // 评论数已由调和器维护在 status 里，不逐帖 countBy
         return Mono.zip(categoriesMono, usersMono, contentsMono)
                 .map(tuple -> posts.stream()
                         .map(post -> buildVo(post, tuple.getT1(), tuple.getT2(), withContent,

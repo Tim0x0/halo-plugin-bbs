@@ -87,7 +87,7 @@ async function onDelete() {
     </div>
     <div class="category-item__end">
       <!-- 只报本分类直属篇数（对齐官方文章分类）；含子分类的合计放进 tooltip，
-           不再在列表里挂「（含子 N）」这种额外文字 -->
+           列表不挂「（含子 N）」这种额外文字 -->
       <span
         v-tooltip="
           !category.parentName && (category.totalPostCount || 0) > (category.postCount || 0)

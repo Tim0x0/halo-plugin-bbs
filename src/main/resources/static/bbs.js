@@ -143,7 +143,7 @@
   });
 
   /* 时间显示统一由服务端渲染（BbsTimeFormats + 后台 dateFormat 设置），
-     此处不再做客户端改写——旧脚本会无视 dateFormat 把绝对格式覆盖成「x 天前」 */
+     此处不做客户端改写——时间格式以服务端渲染为准 */
 
   /* 右栏目录：正文 h2/h3 ≥ 3 时填充显示（仅桌面右栏；移动端不放目录，对齐主流论坛），
      滚动时高亮当前章节 */
@@ -347,7 +347,7 @@
 
     /* 昵称：有 owner.name 套 hip-user-identity（称号 / 勋章渲染在这里，
        所以行内别的标记一律不贴昵称旁边，会被读成用户徽章）。
-       hip 开启时身份行自己按 userCardLinkTemplate 跳转，外面不再套 a；
+       hip 开启时身份行自己按 userCardLinkTemplate 跳转，外面不套 a；
        关闭时仍按作者链接模板整体可点 */
     var roNameEl = function (vo, isReply) {
       var display = (vo.owner && vo.owner.displayName) || '匿名';

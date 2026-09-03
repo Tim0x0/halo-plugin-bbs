@@ -14,8 +14,8 @@ import reactor.core.publisher.Mono;
 /**
  * 端点公用的 springdoc 参数声明与查询参数读取。
  *
- * <p>Console / UC / Public 三个端点原本各自维护一份逐字相同的私有辅助方法，
- * 集中到这里避免同一个参数契约在多处漂移。</p>
+ * <p>Console / UC / Public 三个端点共用这套辅助，
+ * 避免同一个参数契约在多处漂移。</p>
  *
  * @author Tim0x0
  */

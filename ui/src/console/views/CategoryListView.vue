@@ -22,8 +22,8 @@ import CategoryEditingModal from '@/console/components/CategoryEditingModal.vue'
  * @he-tree/vue Draggable 渲染树 + CategoryListItem 项组件。
  * 后端 assembleCategoryVos 返回树序平铺，一级 vo.children 已内嵌子分类。
  *
- * 拖拽后不再逐个回写 priority，而是对比拖拽前后的树算出「哪个节点移到了哪」，
- * 调一次位置 API 由服务端重排（对齐官方 updateCategoryPosition）。这样才支持
+ * 拖拽后对比拖拽前后的树算出「哪个节点移到了哪」，调一次位置 API 由服务端
+ * 重排（对齐官方 updateCategoryPosition），不逐个回写 priority。这样才支持
  * 跨层拖拽换父级，也不会因部分请求失败留下顺序空洞。
  */
 const loading = ref(false)

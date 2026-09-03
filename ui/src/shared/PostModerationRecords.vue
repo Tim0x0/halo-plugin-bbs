@@ -9,7 +9,7 @@ import type { BbsModerationRecord, ModerationAction } from '@/types/bbs'
 /**
  * 审核记录时间线：提交、通过、驳回、取消发布等只追加的审计留痕。
  *
- * 与历史版本面板拆开——审核和快照已彻底解耦：审核不再产生「证据快照」，
+ * 与历史版本面板分开——审核和快照解耦：审核不产生「证据快照」，
  * 记录里的版本号只是当时的参考，点它跳不到、也不该跳到快照列表去。
  */
 const props = defineProps<{
@@ -70,7 +70,7 @@ async function load() {
     records.value = data || []
   } catch (error) {
     // HTTP 错误由全局拦截器提示；这里再把错误打到控制台——空 catch 会把同步异常一并
-    // 吞掉且无任何痕迹，历史上曾因此掩盖过一个首屏空列表 bug。
+    // 吞掉且无任何痕迹。
     console.error('[bbs] 审核记录加载失败', error)
     records.value = []
     loadError.value = error instanceof Error ? error.message : '网络请求失败'
@@ -117,7 +117,7 @@ onMounted(load)
               <time>{{ formatDate(record.spec.createdAt) }}</time>
             </div>
             <p>操作者：{{ record.spec.actor }}</p>
-            <!-- 只呈现该动作落定后的最终状态，不再展示来源态（— → 待审核这类过渡对
+            <!-- 只呈现该动作落定后的最终状态，不展示来源态（— → 待审核这类过渡对
                  阅读留痕没有增益）；驳回原因等上下文由下方 blockquote 承载 -->
             <p v-if="record.spec.toPhase">状态：{{ phaseLabel(record.spec.toPhase) }}</p>
             <blockquote v-if="record.spec.reason">{{ record.spec.reason }}</blockquote>

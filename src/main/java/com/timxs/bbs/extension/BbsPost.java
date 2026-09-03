@@ -36,8 +36,8 @@ public class BbsPost extends AbstractExtension {
     /**
      * 派生状态：由调和器维护，任何写入方都不该手改。
      *
-     * <p>存在的意义是把「每次列表查询都实时 count」变成「预先算好存着」——
-     * 一页 20 条帖子原本要发 20 次统计查询，前台每次访问也在付这个代价。</p>
+     * <p>计数由调和器预先算好存这里，列表查询不逐帖实时统计——否则一页
+     * 20 条帖子就是 20 次统计查询，前台每次访问都在付这个代价。</p>
      */
     private Status status = new Status();
 
@@ -134,7 +134,7 @@ public class BbsPost extends AbstractExtension {
         /*
          * 软删除标记。与 metadata.deletionTimestamp（真删）分开：
          * 删帖先置此标记进回收站，前台与列表立即不可见，但内容还在、可恢复。
-         * 老数据没有该键，反序列化后保持默认 false——「没有这个字段」的语义本就是「未删除」。
+         * 数据缺该键时反序列化后保持默认 false——「没有这个字段」的语义就是「未删除」。
          */
         @Schema(description = "是否已移入回收站（软删除）；彻底删除才会真正移除数据")
         private Boolean deleted = false;

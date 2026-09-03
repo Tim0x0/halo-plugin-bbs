@@ -217,7 +217,7 @@ async function loadPost(name: string) {
     }
     return true
   } catch (error) {
-    /* 全局拦截器已提示，不再二次 Toast */
+    /* 全局拦截器已提示，不二次 Toast */
     // 同步异常（如字段引用错误）也会被这里吞掉，打到控制台便于定位
     console.error('[bbs] 编辑器帖子加载失败', error)
     editorLoadFailed.value = true
@@ -286,7 +286,7 @@ async function handleUploadImage(file: File, options?: AxiosRequestConfig) {
 
 /**
  * 保存，对齐官方 PostEditor.handleSave：
- * - 标题为空自动补「未命名」，不再拦截；正文允许为空
+ * - 标题为空自动补「未命名」，不拦截；正文允许为空
  * - 新建直接建未发布帖（不弹设置弹窗）；slug 为空按标题生成
  * - mute=true 时静默保存（自动保存 / Ctrl+S 前的预检场景共用），不弹 Toast
  */

@@ -67,7 +67,7 @@ async function fetchCategories() {
     categories.value = data || []
   } catch (error) {
     // 分类加载失败不阻塞列表；但把错误打到控制台——空 catch 会把同步异常一并吞掉且
-    // 无任何痕迹，历史上曾因此掩盖过一个首屏空列表 bug。
+    // 无任何痕迹。
     console.error('[bbs] 分类加载失败', error)
   }
 }
@@ -121,7 +121,7 @@ async function fetchPosts() {
     total.value = data.total || 0
   } catch (error) {
     // HTTP 错误由全局拦截器提示；这里再把错误打到控制台——空 catch 会把拼参数时的
-    // 同步异常一并吞掉，历史上曾因此掩盖过一个首屏空列表 bug。
+    // 同步异常一并吞掉且无任何痕迹。
     console.error('[bbs] 我的帖子加载失败', error)
   } finally {
     if (seq === fetchSeq) {
@@ -138,7 +138,7 @@ watch(
   }
 )
 
-// 唯一的请求入口（VPagination 因此不再单独绑 @change，否则翻页触发两次）
+// 唯一的请求入口（VPagination 不单独绑 @change，否则翻页触发两次）
 watch(
   () => [
     filters.page,
@@ -163,7 +163,7 @@ const settingPost = ref<BbsPostVo | null>(null)
 const settingForm = ref(defaultPostForm())
 const settingSaving = ref(false)
 const settingPublishing = ref(false)
-/** 审核记录弹窗的目标帖名；审核留痕从编辑器挪到列表行下拉后的唯一入口 */
+/** 审核记录弹窗的目标帖名；审核留痕的唯一入口是列表行下拉 */
 const moderationName = ref('')
 
 async function openSetting(post: BbsPostVo) {
@@ -475,7 +475,7 @@ onMounted(() => {
     @close="settingVisible = false"
   />
 
-  <!-- 审核记录：唯一入口在行下拉菜单（编辑器不再挂此按钮） -->
+  <!-- 审核记录：唯一入口在行下拉菜单（编辑器不挂此按钮） -->
   <PostModerationRecords
     v-if="moderationName"
     :post-name="moderationName"

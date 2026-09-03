@@ -75,7 +75,7 @@ button {
   position: sticky;
   top: 0;
   /* 低于全屏灯箱（z-100），灯箱打开时仍盖住顶栏。
-     hip-user-card 已走 popover top layer，不再跟顶栏抢层叠 */
+     hip-user-card 走 popover top layer，不与顶栏抢层叠 */
   z-index: 90;
   background: var(--b-bg);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -1344,7 +1344,7 @@ a.bbs-stag:hover {
 
 .bbs-post__head .bbs-post__time {
   display: flex;
-  /* 独占第二行（原先靠「块级 flex 自然换行」达成） */
+  /* 独占第二行 */
   flex-basis: 100%;
   margin-top: 3px;
 }
@@ -1352,7 +1352,7 @@ a.bbs-stag:hover {
 /* 昵称容器：inline-flex 而非行内——里面装的是 hip-user-identity（身份行），
    走行内布局时它坐在基线上，比文字高就只把行盒顶部撑高，盒心随之高于文字视觉
    中心，外层 align-items:center 对齐的是这个被抬高的盒心，「楼主」标签就偏上。
-   改成 flex 容器后本元素高度 == 身份行高度，没有半行距也没有基线降部空白。
+   flex 容器使本元素高度 == 身份行高度，没有半行距也没有基线降部空白。
    .bbs-flr__name / .bbs-rep__name 同理（三处同款结构） */
 .bbs-post__name {
   display: inline-flex;
@@ -1367,11 +1367,11 @@ a.bbs-post__name:hover {
 }
 
 /* 「楼主」描边小标签（楼主楼 / 评论楼 / 回复三处复用）。
-   自居中的定高盒：高度用整数 px 定死，文字位置交给内部 flex——不再让
+   自居中的定高盒：高度用整数 px 定死，文字位置交给内部 flex——不让
    line-height 一个变量同时管「盒子多高」和「文字在盒子里的哪」。
-   原来 11 × 1.6 + 2 边框 = 19.6px 是分数盒高，外层 flex 算
-   (容器高 − 项高)/2 会落在半像素上，取整后能显示成整整 1px 的偏移。
-   20px ≈ 原来的 19.6px，观感不变。flex:none 防行内挤压时被压扁 */
+   整数 20px（11 × 1.6 行高 + 2 边框 ≈ 19.6px，取整）避免分数盒高：
+   外层 flex 算 (容器高 − 项高)/2 落在半像素上，取整后显示成 1px 偏移。
+   flex:none 防行内挤压时被压扁 */
 .bbs-op {
   display: inline-flex;
   align-items: center;
@@ -1650,7 +1650,7 @@ a.bbs-post__name:hover {
 }
 
 /* ul 的 disc → circle → square 用浏览器默认即可；ol 嵌套默认逐层都是数字，
-   按中文技术文档惯例改成 数字 → 小写字母 → 罗马数字 */
+   按中文技术文档惯例：数字 → 小写字母 → 罗马数字 */
 .prose ol ol {
   list-style-type: lower-alpha;
 }
@@ -2001,7 +2001,7 @@ hip-user-card {
   flex: none;
 }
 
-/* 悬浮名片已走 popover top layer，宿主不再做定位基准 / 层叠。
+/* 悬浮名片走 popover top layer，宿主不做定位基准 / 层叠。
    align-self:flex-start 仍要：防父级 flex stretch 把宿主拉成整楼高 */
 hip-user-card {
   align-self: flex-start;
@@ -2586,7 +2586,7 @@ a.bbs-flr__no:hover {
 
 /* ============================================================
    无主题色（.is-unthemed）
-   主题色清空时模板不写 --b-accent；实底 + 白字控件在此改为
+   主题色清空时模板不写 --b-accent；实底 + 白字控件在此用
    中性底 / 深字，保证可读。全透明主题色仍写入 --b-accent，不走本块。
    分类 Hero 与 Banner 图不依赖主题色。
    ============================================================ */

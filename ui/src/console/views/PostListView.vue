@@ -92,7 +92,7 @@ const settingPost = ref<BbsPostVo | null>(null)
 const settingForm = ref(defaultPostForm())
 const settingSaving = ref(false)
 const settingPublishing = ref(false)
-/** 审核记录弹窗的目标帖名；审核留痕从编辑器挪到列表行下拉后的唯一入口 */
+/** 审核记录弹窗的目标帖名；审核留痕的唯一入口是列表行下拉 */
 const moderationName = ref('')
 /** 评论管理弹窗的目标帖名；评论列（有未审核时上色）点击打开 */
 const commentsPost = ref('')
@@ -162,7 +162,7 @@ async function fetchCategories() {
     categoriesLoaded.value = true
   } catch (error) {
     // 筛选项加载失败不阻塞列表；但把错误打到控制台——空 catch 会把同步异常（如引用
-    // 未初始化变量）一并吞掉且无任何痕迹，历史上曾因此掩盖过一个首屏空列表 bug。
+    // 未初始化变量）一并吞掉且无任何痕迹。
     console.error('[bbs] 分类筛选加载失败', error)
   }
 }
@@ -196,7 +196,7 @@ async function fetchPosts() {
     total.value = data.total || 0
   } catch (error) {
     // HTTP 错误由全局拦截器提示；这里再把错误打到控制台——空 catch 会把拼参数时的
-    // 同步异常（如引用未初始化变量）一并吞掉，历史上曾因此掩盖过一个首屏空列表 bug。
+    // 同步异常（如引用未初始化变量）一并吞掉且无任何痕迹。
     console.error('[bbs] 帖子列表加载失败', error)
   } finally {
     if (seq === fetchSeq) {
@@ -230,7 +230,7 @@ watch(
   }
 )
 
-// 唯一的请求入口：分页与筛选都走这里。VPagination 因此不再单独绑 @change，
+// 唯一的请求入口：分页与筛选都走这里。VPagination 不单独绑 @change，
 // 否则翻页会触发两次请求。keyword 听 debounce 后的值，避免每个字符打一次。
 watch(
   () => [
@@ -1063,7 +1063,7 @@ onMounted(() => {
     </template>
   </VModal>
 
-  <!-- 审核记录：唯一入口在行下拉菜单（编辑器不再挂此按钮） -->
+  <!-- 审核记录：唯一入口在行下拉菜单（编辑器不挂此按钮） -->
   <PostModerationRecords
     v-if="moderationName"
     :post-name="moderationName"

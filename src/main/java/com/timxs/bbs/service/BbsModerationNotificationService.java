@@ -122,7 +122,7 @@ public class BbsModerationNotificationService {
 
     /**
      * 通过后链到前台帖子。驳回一律链到 UC 编辑器：未发布帖前台打不开；
-     * 已发布帖的修改稿被驳回时前台仍是旧版本，作者必须进编辑器改工作稿。
+     * 已发布帖的修改稿被驳回时前台仍是已发布版本，作者必须进编辑器改工作稿。
      */
     private static String resultUrl(BbsPost post) {
         var spec = post.getSpec();

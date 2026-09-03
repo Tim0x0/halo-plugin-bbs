@@ -232,7 +232,7 @@
 
       <div class="bbs-post__main">
         <div class="bbs-post__head">
-          <!-- hip 开启：身份行自己按 userCardLinkTemplate 跳转，外面不再套 a（避免套娃）。
+          <!-- hip 开启：身份行自己按 userCardLinkTemplate 跳转，外面不套 a（避免套娃）。
                hip 关闭：与列表相同，authorLinkTemplate 空则纯文本 -->
           <span class="bbs-post__name" th:if="${post.owner != null and hipEnabled}">
             <hip-user-identity scene="post" th:attr="user-name=${post.owner.name}">
@@ -306,7 +306,7 @@
       </div>
       <!-- data-owner-name：楼主 username，脚本据此给同人的楼层挂「楼主」标签；
            data-author-link：同帖子页的作者链接模板（空则楼层昵称不可点）；
-           data-hip：开启时身份行自己跳转，脚本不再外包 a -->
+           data-hip：开启时身份行自己跳转，脚本不外包 a -->
       <div id="bbsRoComments" th:if="${post.locked}"
            th:attr="data-post-name=${post.name}, data-date-format=${dateFormat}, data-owner-name=${post.owner != null ? post.owner.name : ''}, data-author-link=${authorLinkTemplate}, data-hip=${hipEnabled}"></div>
       <halo:comment th:unless="${post.locked}"

@@ -204,7 +204,7 @@ jobs:
                 -H "Authorization: Bearer $BBS_POST_PAT")
             elif [ "$HTTP" = "200" ] && [ "$PUBLISH" = "false" ] \
                  && [ "$EXISTING_PHASE" = "PUBLISHED" ]; then
-              # 目标是草稿但帖子已发布：新内容留在工作稿，前台保持旧版本。
+              # 目标是草稿但帖子已发布：新内容留在工作稿，前台保持已发布版本。
               # 不自动撤稿——撤下已发布内容应由人在后台决定。
               echo "::warning::帖子 $EXISTING 已发布，本次改动保存在工作稿；如需下架请在后台操作"
             fi

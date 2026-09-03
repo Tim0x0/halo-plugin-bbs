@@ -189,7 +189,7 @@ function nextPriority(parentName: string): number {
 
 /**
  * 别名生成，与官方文章分类一致：**新建时随分类名实时联想**（边打名字边出别名），
- * 编辑已有分类时不再自动改——否则改个错别字就把已发布的分类链接换掉了。
+ * 编辑已有分类时不自动改——否则改个错别字就把已发布的分类链接换掉了。
  * 右侧刷新按钮传 forceUpdate 强制按当前名称重算（编辑态下的唯一改法）。
  */
 const { handleGenerateSlug } = useSlugify(
@@ -218,7 +218,7 @@ const { handleGenerateColor } = useCategoryColor(
 
 /**
  * 别名唯一性：走 FormKit 校验规则，错误挂在字段下方（对齐官方 slugUniqueValidation），
- * 不再在提交函数里 await + Toast。后端唯一索引兜底并发场景。
+ * 不在提交函数里 await + Toast。并发场景由后端唯一索引兜底。
  */
 async function slugUniqueValidation(node: { value?: unknown }) {
   const slug = slugify(String(node.value || '').trim(), { trim: true })
@@ -254,7 +254,7 @@ function parentLevelValidation(node: { value?: unknown }) {
 async function onSubmit() {
   const keepAdding = keepAddingFlag.value
   // 名称必填、别名唯一性、两级封顶均由 FormKit 校验规则负责（错误挂在字段下方），
-  // 此处不再重复弹 Toast
+  // 此处不重复弹 Toast
   if (!formState.value.slug?.trim()) {
     formState.value.slug = slugify(formState.value.displayName)
   }

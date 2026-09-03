@@ -180,7 +180,7 @@
 </section>
 
 <!-- 分类 Hero：封面图优先，无封面用分类色铺底；分类层级由左栏（移动端为分类下拉）表达，
-     hero 不再重复面包屑——末项与 h1 恒为同一分类名 -->
+     hero 不重复面包屑——末项与 h1 恒为同一分类名 -->
 <section th:if="${currentCategoryVo != null}" class="bbs-hero bbs-hero--cat"
          th:classappend="${!#strings.isEmpty(currentCategoryVo.cover)} ? 'bbs-hero--img'
              : (${#strings.isEmpty(currentCategoryVo.color)} ? 'is-plain' : '')"

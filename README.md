@@ -98,7 +98,7 @@ curl -s "https://你的站点/apis/bbs.timxs.com/v1alpha1/bbscategories" \
 | `/feed/bbs/posts.xml` | 全站 RSS 2.0（需 plugin-feed） |
 | `/feed/bbs/categories/{slug}.xml` | 一级分类树 RSS（需 plugin-feed） |
 
-顶栏可选挂站点菜单：插件设置「外观 → 品牌 → 顶栏菜单」选已有菜单组，留空则顶栏不显示导航。多级菜单一律点击展开（不做悬停展开）：桌面点箭头出下拉（子项缩进平铺），窄屏进汉堡、点箭头逐层展开；带链接的父项文字跳转、箭头开合，不带链接的父项整项即开关。兼容 2.25 旧存法（`menuItems` + `children`）与 2.26 新存法（`menuName` + `parent`）及两者混存。
+顶栏可选挂站点菜单：插件设置「外观 → 品牌 → 顶栏菜单」选已有菜单组，留空则顶栏不显示导航。多级菜单一律点击展开（不做悬停展开）：桌面点箭头出下拉（子项缩进平铺），窄屏进汉堡、点箭头逐层展开；带链接的父项文字跳转、箭头开合，不带链接的父项整项即开关。兼容 Halo 2.25（`menuItems` + `children`）与 2.26（`menuName` + `parent`）两种菜单存法及两者混存。
 
 **作者名链接**（无独立 BBS 作者页）：
 
@@ -166,7 +166,7 @@ curl -s "https://你的站点/apis/bbs.timxs.com/v1alpha1/bbscategories" \
 - `bbs.html` — 列表页
 - `bbs_post.html` — 详情页
 
-> 已不再提供 `bbs_author.html` / `/bbs/u/{username}`。请在主题作者页（如 `/authors/{name}`）用 Finder 聚合 BBS 数据，或依赖 interaction-plus 用户卡跳转。
+> BBS 没有独立作者页（无 `bbs_author.html` / `/bbs/u/{username}`）。请在主题作者页（如 `/authors/{name}`）用 Finder 聚合 BBS 数据，或依赖 interaction-plus 用户卡跳转。
 
 ### 2. Finder API（`${bbs}`）
 
@@ -243,7 +243,7 @@ curl -s "https://你的站点/apis/bbs.timxs.com/v1alpha1/bbscategories" \
 
 ## 数据模型
 
-- **BbsPost**（`bbs.timxs.com/v1alpha1`）：标题、slug、类型（公告 / 讨论 / 问答）、分类、摘要与业务状态；正文完整复用 Halo 核心 **Snapshot** GVK，通过 `baseSnapshot` / `headSnapshot` / `releaseSnapshot` 区分差异基线、工作版本和前台版本。`spec.draft` 只保存已发布内容的工作稿元数据与审核状态，不再复制正文；此外还包含置顶 + 权重、锁定、已解决、软删除、发布时间、最后活跃时间、最后编辑时间、作者
+- **BbsPost**（`bbs.timxs.com/v1alpha1`）：标题、slug、类型（公告 / 讨论 / 问答）、分类、摘要与业务状态；正文完整复用 Halo 核心 **Snapshot** GVK，通过 `baseSnapshot` / `headSnapshot` / `releaseSnapshot` 区分差异基线、工作版本和前台版本。`spec.draft` 只保存已发布内容的工作稿元数据与审核状态（不复制正文）；此外还包含置顶 + 权重、锁定、已解决、软删除、发布时间、最后活跃时间、最后编辑时间、作者
 - **BbsModerationRecord**（`bbs.timxs.com/v1alpha1`）：只追加的提交、发布、通过、驳回、撤稿与取消发布审计事件；历史恢复经提交 / 发布事件附原因记录；每条记录绑定当时的 Snapshot（仅展示参考），历史版本删除遵循官方规则（仅基线与发布中版本不可删），不因审核记录引用而额外保护
 - **BbsCategory**：名称、slug（唯一）、描述、Iconify（含离线 SVG，颜色烤在 SVG 里）、分类色、父分类、封面、排序、启用、置顶帖上首页（仅一级）、版主角色（仅一级）
 

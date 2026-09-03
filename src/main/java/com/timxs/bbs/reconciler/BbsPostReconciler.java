@@ -43,8 +43,8 @@ import run.halo.app.search.event.HaloDocumentDeleteRequestEvent;
  * {@code CategoryPostCountUpdater} 的做法。</p>
  *
  * <p>分类计数与搜索索引各自保存输入指纹。评论只会改变
- * {@code status.commentsCount}/{@code lastActivityTime}，不会命中这两类指纹，因而不再
- * 重算分类，也不再还原整份 release Snapshot。</p>
+ * {@code status.commentsCount}/{@code lastActivityTime}，不会命中这两类指纹，因而
+ * 不重算分类，也不还原整份 release Snapshot。</p>
  *
  * <p>仅需 {@code @Component}，Halo 会自动注册并随插件启停（勿手动 start/stop）。</p>
  *

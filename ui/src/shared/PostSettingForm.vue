@@ -67,7 +67,7 @@ const { handleGenerateSlug } = useSlugify(
 
 /**
  * 别名唯一性：走 FormKit 校验规则，错误挂字段下方（对齐官方设置弹窗的
- * slugUniqueValidation 与本项目分类表单同款做法），不再等发布时撞 400。
+ * slugUniqueValidation 与本项目分类表单同款做法），不必等发布时撞 400。
  * 后端预检口径 = 发布占用口径（已发布 / 待审核 / 已提交修改稿），
  * 且服务端落库前会做同样归一，故这里直接提交用户输入。
  */

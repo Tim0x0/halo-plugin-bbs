@@ -25,10 +25,10 @@ import run.halo.app.extension.ReactiveExtensionClient;
 /**
  * 把 Halo 菜单组展开成顶栏项列表。
  *
- * <p>层级存储新旧两代都要兼容：2.25 及以前父级在 {@code MenuItem.spec.children}、
- * 根由 {@code Menu.spec.menuItems} 指定；2.26 起迁移到 {@code spec.menuName} +
- * {@code spec.parent}（前两者废弃）。新字段经反射读取——基线 2.25 的 API 没有
- * 它们，字段不存在时返回 null 自动回退旧存法。插件模板不支持跨文件 fragment，
+ * <p>层级存储兼容 Halo 两代格式：2.25 及以前父级在 {@code MenuItem.spec.children}、
+ * 根由 {@code Menu.spec.menuItems} 指定；2.26 起为 {@code spec.menuName} +
+ * {@code spec.parent}（前两者废弃）。2.26 字段经反射读取——编译基线 2.25 的 API
+ * 没有它们，字段不存在返回 null 时按 2.25 格式解析。插件模板不支持跨文件 fragment，
  * 树在这里拍平：顶层项带全量后代（深度优先，{@code depth} 标层级），模板单层
  * 循环渲染。缺菜单 / 读失败返回空列表，不挡前台。</p>
  */
@@ -38,7 +38,7 @@ public class BbsHeaderMenuService {
 
     private static final int MAX_DEPTH = 6;
 
-    /** 2.26 新增字段；2.25 的 MenuItemSpec 没有，解析为 null。 */
+    /** 2.26 字段；2.25 的 MenuItemSpec 没有，解析为 null。 */
     private static final Method SPEC_GET_PARENT = specMethod("getParent");
     private static final Method SPEC_GET_MENU_NAME = specMethod("getMenuName");
 
@@ -76,7 +76,7 @@ public class BbsHeaderMenuService {
             }
         }
 
-        // 父级关系：优先新版 spec.parent，回退旧版父项的 children 集合
+        // 父级关系：优先 2.26 的 spec.parent，回退 2.25 父项的 children 集合
         Map<String, String> parentOf = new HashMap<>();
         for (var item : items) {
             var parent = invokeString(SPEC_GET_PARENT, item.getSpec());
@@ -107,8 +107,8 @@ public class BbsHeaderMenuService {
         }
         childrenOf.values().forEach(list -> list.sort(itemComparator()));
 
-        // 成员 = 旧版声明闭包 + 新版 menuName 命中。注意旧版 Console 把**全部成员**
-        // （含子项）都存进 Menu.spec.menuItems、不只是根（官方迁移同款口径），
+        // 成员 = 2.25 声明闭包 + 2.26 menuName 命中。注意 2.25 Console 把**全部成员**
+        // （含子项）都存进 Menu.spec.menuItems、不只是根（官方同款口径），
         // 故声明项要连带子树闭包收进成员，再按「不是其他成员的子项」筛根，
         // 否则子项会同时出现在顶层与下拉里，或者新旧混存时整组丢失。
         Set<String> members = new LinkedHashSet<>();
@@ -126,8 +126,8 @@ public class BbsHeaderMenuService {
             }
         }
 
-        // 顶层排序：声明过的根保持菜单配置顺序（旧版 / 迁移数据）；
-        // 纯新版（无声明）的根按官方口径排（priority / 创建时间 / 名称），
+        // 顶层排序：声明过的根保持菜单配置顺序（2.25 声明式数据）；
+        // 纯 2.26（无声明）的根按官方口径排（priority / 创建时间 / 名称），
         // 否则顺序跟着 listAll 返回漂，刷新页面菜单会换序
         var declaredSet = declared == null ? Set.<String>of()
                 : declared.stream().filter(Objects::nonNull)

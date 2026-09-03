@@ -16,7 +16,7 @@ import run.halo.app.extension.GVK;
  * <p>{@code spec.slug} 为自定义永久链接（前台 {@code /bbs?category={slug}}），唯一。
  * 图标与颜色：{@code icon} 为 Iconify 名，{@code iconSvg} 为选择器输出的离线 SVG——
  * 选色已烤进 {@code fill}，未选色则是 {@code currentColor} 随所在位置文字色（对齐官方
- * iconify 输入的行为，前台不再二次上色）；{@code color} 是独立分类色（色点 / Tag /
+ * iconify 输入的行为，前台不二次上色）；{@code color} 是独立分类色（色点 / Tag /
  * 分类 Hero，新建按显示名预填），可空可透明，清空后前台不上色。</p>
  *
  * <p>层级：{@code parentName} 为空即一级分类，否则为其子分类；层级封顶两级——
@@ -42,7 +42,7 @@ public class BbsCategory extends AbstractExtension {
      * 派生状态：由调和器维护，任何写入方都不该手改。
      *
      * <p>计数存的是<b>本分类直属</b>的数量；「含子分类的合计」由查询层在装配 VO 时
-     * 按树聚合（纯内存计算，不再触发查询）。</p>
+     * 按树聚合（纯内存计算，不触发查询）。</p>
      */
     private Status status = new Status();
 
@@ -98,7 +98,7 @@ public class BbsCategory extends AbstractExtension {
         @Schema(description = "排序优先级，值越小越靠前")
         private Integer priority = 0;
 
-        @Schema(description = "是否启用（停用后前台不再展示）")
+        @Schema(description = "是否启用（停用后前台不展示）")
         private Boolean enabled = true;
 
         @Schema(description = "本分类树（本级 + 全部子分类）下被置顶的帖是否出现在首页列表顶部。"

@@ -106,7 +106,7 @@ public class BbsModerationRecordService {
         spec.setReason(StringUtils.abbreviate(StringUtils.trimToNull(event.reason()), 500));
         spec.setCreatedAt(event.createdAt());
 
-        // 快照与审核解耦：记录里的 snapshotName 只是展示参考，不再给快照打删除保护注解。
+        // 快照与审核解耦：记录里的 snapshotName 只是展示参考，不给快照打删除保护注解。
         // 审核轨迹由记录本身承载，历史版本按官方规则（基线 / 发布版不可删）自行管理。
         return client.fetch(BbsModerationRecord.class, name)
                 .switchIfEmpty(Mono.defer(() -> client.create(record)

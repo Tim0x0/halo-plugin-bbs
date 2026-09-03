@@ -210,7 +210,7 @@ async function loadPost(name: string) {
     }
     return true
   } catch (error) {
-    /* 全局拦截器已提示，不再二次 Toast */
+    /* 全局拦截器已提示，不二次 Toast */
     // 同步异常（如字段引用错误）也会被这里吞掉，打到控制台便于定位
     console.error('[bbs] 编辑器帖子加载失败', error)
     editorLoadFailed.value = true
@@ -554,7 +554,7 @@ function onSubmitClick() {
 }
 
 // 统一两字文案：无论新建 / 驳回重提 / 修改稿提交都叫「提交」，
-// 状态差异由状态列与审核记录表达，动词不再背着状态
+// 状态差异由状态列与审核记录表达，动词不背着状态
 const submitLabel = '提交'
 
 onMounted(async () => {

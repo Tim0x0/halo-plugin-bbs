@@ -221,7 +221,7 @@ public class BbsPostService {
                             if (before.changedIn(ignored)) {
                                 draft.setLastEditTime(Instant.now());
                                 // 被驳回的修改稿一经修改即转入「等待修改后重提」，
-                                // 原驳回原因不再适用。状态不动（WordPress 式：
+                                // 驳回原因随之失效。状态不动（WordPress 式：
                                 // 保存只更新内容，审核状态只由提交 / 审核改变）
                                 draft.setRejectReason(null);
                             }
@@ -229,7 +229,7 @@ public class BbsPostService {
             }
 
             applyRequest(spec, request, false, existingType);
-            // 未发布内容本身就是工作稿，不应再残留第二层 draft（兼容旁路写入的脏数据）。
+            // 未发布内容本身就是工作稿，不应残留第二层 draft（兼容旁路写入的脏数据）。
             spec.setDraft(null);
             var before = HeadState.of(post);
 
@@ -448,7 +448,7 @@ public class BbsPostService {
     /**
      * 取消提交公共逻辑：未发布的待审核帖退回草稿；已发布帖的待审核修改稿退回
      * 草稿态（前台发布版不受影响）；其余状态 400。留撤回审计，快照绑定当时
-     * 的 head 工作版本。保存不再自动触发——撤回是显式动作。
+     * 的 head 工作版本。撤回是显式动作，保存不触发。
      */
     private Mono<BbsPost> withdrawSubmission(BbsPost post, String actor) {
         var spec = post.getSpec();
@@ -480,7 +480,7 @@ public class BbsPostService {
      * 发布 / 审核通过。
      *
      * <p>存在工作稿时先完整提升工作稿，再发布；不存在时发布当前未发布内容。
-     * 提升之前校验工作稿的目标分类和别名，避免已发布旧版本掩盖候选版本冲突。</p>
+     * 提升之前校验工作稿的目标分类和别名，避免已发布版本掩盖候选版本冲突。</p>
      */
     public Mono<BbsPost> publish(String name) {
         return publish(name, BbsModerationRecord.Action.PUBLISHED);
@@ -818,7 +818,7 @@ public class BbsPostService {
         }
     }
 
-    /** 管理端移入回收站：显式走版主管辖，不再用 null owner 表示跳过归属校验。 */
+    /** 管理端移入回收站：显式走版主管辖。 */
     public Mono<BbsPost> recycleInScope(String name) {
         return mutate(name, post -> post.getSpec().setDeleted(true));
     }
@@ -879,7 +879,7 @@ public class BbsPostService {
     //
     // 端点形态与语义对齐官方 PostEndpoint 的 {name}/content、{name}/snapshot、
     // {name}/revert-content 子路径。可见性完全跟随帖子：Console 侧过了版主管辖校验、
-    // UC 侧过了归属校验，该帖的全部快照就都可读——不再按快照自身的历史分类二次过滤。
+    // UC 侧过了归属校验，该帖的全部快照就都可读——不按快照自身的历史分类二次过滤。
 
     /** Console：head 正文（编辑器载入）。 */
     public Mono<BbsContentVo> getHeadContentInScope(String name) {
@@ -959,7 +959,7 @@ public class BbsPostService {
      *
      * <p>已发布帖只记工作稿时间——「已编辑」跟着**发布版**走，{@code spec}
      * 的时间等工作稿被提升时由 {@link #promoteDraft} 同步。否则修改稿还在
-     * 审核中、前台仍是旧版，列表与前台就会提前挂出「已编辑」。无草稿时
+     * 审核中、前台仍是已发布版本，列表与前台就会提前挂出「已编辑」。无草稿时
      * 补建一个（正文改动本身就构成未发布修改）。</p>
      *
      * <p>未发布帖记 {@code spec}：发布时间尚为 null，怎么记都不会误标。</p>
@@ -1024,7 +1024,7 @@ public class BbsPostService {
      *   <li>未发布帖：只换 head，不碰 release、不碰 phase——照搬官方会把草稿误发布；</li>
      *   <li>已发布帖 + 无需重审：{@code release = head}，旧正文立刻回到前台，等同官方行为；</li>
      *   <li>已发布帖 + 需重审：写 {@code draft.phase = PENDING}，帖子本体继续 PUBLISHED，
-     *       前台仍是旧版，等管理员审核。</li>
+     *       前台仍是已发布版本，等管理员审核。</li>
      * </ul>
      *
      * <p>两条已发布分支都<b>不提升 draft</b>：恢复只作用于正文，作者尚未提交的标题 / 分类
@@ -1351,7 +1351,7 @@ public class BbsPostService {
     }
 
     /**
-     * 摘要写入：{@code autoGenerate} 显式表达「是否自动」，不再靠 excerpt 空值反推。
+     * 摘要写入：{@code autoGenerate} 显式表达「是否自动」，不靠 excerpt 空值反推。
      *
      * <p>自动模式下 {@code raw} 存 null——展示文本由 {@link BbsExcerpts#resolve}
      * 实时截取正文，正文改则摘要跟随。</p>
@@ -1393,7 +1393,7 @@ public class BbsPostService {
 
     /** slug 归一：小写、空白转连字符，仅保留字母数字 / 中文 / 连字符。
      *  <p>幂等：对已存在的别名（含历史中文别名）重复 slugify 不改变其值，
-     *  保证编辑老帖子时别名稳定。别名转拼音由前端 transliteration 在提交前完成
+     *  保证编辑已有帖子时别名稳定。别名转拼音由前端 transliteration 在提交前完成
      *  （对标 Halo 官方 use-slugify）；此处仅做归一与留空兜底。 */
     private static String slugify(String input) {
         var slug = Objects.toString(input, "")

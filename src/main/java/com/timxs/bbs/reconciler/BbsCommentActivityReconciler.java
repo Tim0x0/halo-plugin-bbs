@@ -18,7 +18,7 @@ import run.halo.app.extension.controller.ControllerBuilder;
  *
  * <p>口径与评论数统计一致：仅计 {@link Comment}，楼中楼回复（Reply）不触发顶帖。
  * 评论删除不回退活跃时间（幂等向前，避免删评引发的批量重算）。启动期全量调和
- * 会自动为历史帖补齐活跃时间，无需数据迁移。</p>
+ * 保证每篇帖子都有活跃时间。</p>
  *
  * <p>不挂 finalizer：Comment 是 Halo 核心资源，本调和器只读评论、按需更新帖子。</p>
  *

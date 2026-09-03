@@ -296,7 +296,7 @@ export const categoryApi = {
   },
   /**
    * 别名唯一性预检：fieldSelector 精确查询 + size:1 只取 total，
-   * 不再全量拉取到前端过滤（分类超出单页 size 时会漏判）。
+   * 不全量拉取到前端过滤（分类超出单页 size 时会漏判）。
    * spec.slug 有唯一索引、metadata.name 有默认索引，两者均可走索引。
    */
   async isSlugTaken(slug: string, excludeName?: string) {
