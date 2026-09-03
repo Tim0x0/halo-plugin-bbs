@@ -65,7 +65,8 @@ import run.halo.app.extension.index.query.Condition;
  * <p><b>置顶</b>（跟列表流）：第 1 页顶部先挂本视图置顶（不限条数），再接普通流；
  * 第 2 页起无置顶头。置顶候选整类从普通流排除。首页置顶 =
  * 帖 {@code pinned} ∩ 所属分类落在「开了 {@code pinToHome} 的一级分类及其子分类」内
- * （仅一级可开，覆盖整棵子树）；分类页置顶 = 作用域内 {@code pinned}。
+ * （仅一级可开，覆盖整棵子树）；分类页置顶 = 本分类的 {@code pinned}（只在本分类页
+ * 浮顶，不向父分类传染；首页是唯一显式跨级闸门）。
  * 浮顶的那批 VO 会被标记 {@code pinnedInView}——置顶徽标以此为准，而非帖子的
  * {@code pinned} 属性，避免未浮顶的帖挂出指向空位置的图钉。</p>
  *
@@ -279,9 +280,10 @@ public class BbsQueryService {
     /**
      * 把本视图真正浮顶的那批 VO 标记为 {@code pinnedInView}——前台徽标据此渲染。
      *
-     * <p>普通流里可能混有 {@code pinned=true} 但本视图未浮顶的帖（首页里所属分类
-     * 不在置顶作用域内——即其一级分类未开 {@code pinToHome}，或帖子无分类），
-     * 它们保持 false，否则图标会指向一个并不存在的置顶位置。</p>
+     * <p>普通流里可能混有 {@code pinned=true} 但本视图未浮顶的帖：首页里所属分类
+     * 不在置顶作用域内（其一级分类未开 {@code pinToHome}），或一级分类页里的
+     * 子分类置顶（不向父分类传染）。它们保持 false，否则图标会指向一个并不存在
+     * 的置顶位置。</p>
      */
     private static List<BbsPostVo> markPinnedInView(List<BbsPostVo> vos, List<BbsPost> pins) {
         if (pins.isEmpty()) {
@@ -302,7 +304,7 @@ public class BbsQueryService {
      * 会让每个子分类都能往首页塞置顶帖。表单已对二级隐藏该开关，存量脏数据由
      * {@code BbsCategoryReconciler} 抹平，这里再挡一道。</p>
      *
-     * <p>分类页不走这里——分类页的置顶只看帖的 {@code pinned}。</p>
+     * <p>分类页不走这里——分类页的置顶 = 本分类的 {@code pinned}，不跨级。</p>
      */
     private static List<String> homePinCategoryNames(List<BbsCategory> all, CategoryContext ctx) {
         if (!ctx.isHome()) {
@@ -331,7 +333,8 @@ public class BbsQueryService {
 
     /**
      * 置顶条件：首页 = pinned ∩ 分类落在首页置顶作用域内（见 {@link #homePinScope}）；
-     * 分类页 = 作用域内 pinned。作用域为空时首页返回 null（表示无置顶段）。
+     * 分类页 = 本分类的 pinned（只在本分类页浮顶，不向父分类传染——首页是唯一的
+     * 跨级闸门）。作用域为空时首页返回 null（表示无置顶段）。
      */
     private static Condition pinCondition(Condition base, List<String> homePinCats, CategoryContext ctx) {
         if (ctx.isHome()) {
@@ -341,7 +344,8 @@ public class BbsQueryService {
             return and(base, and(equal("spec.pinned", Boolean.TRUE),
                     in("spec.categoryName", homePinCats)));
         }
-        return and(base, equal("spec.pinned", Boolean.TRUE));
+        return and(base, equal("spec.pinned", Boolean.TRUE),
+                equal("spec.categoryName", ctx.selfName()));
     }
 
     /** 普通流：排除本视图全部置顶候选（不仅是第 1 页展示出来的）。 */
@@ -355,7 +359,9 @@ public class BbsQueryService {
             return and(base, not(and(equal("spec.pinned", Boolean.TRUE),
                     in("spec.categoryName", homePinCats))));
         }
-        return and(base, not(equal("spec.pinned", Boolean.TRUE)));
+        // 只排除本分类的置顶；子分类的置顶帖在一级分类页留在普通流
+        return and(base, not(and(equal("spec.pinned", Boolean.TRUE),
+                equal("spec.categoryName", ctx.selfName()))));
     }
 
     private static Condition appendFilters(Condition base, String keyword, String type) {

@@ -60,7 +60,8 @@ public class BbsPostVo {
      *
      * <p>{@code pinned} 是帖子固有属性，{@code pinnedInView} 是视图状态：首页仅当所属分类
      * 开启 {@code pinToHome} 时为 true（未开启的置顶帖混在普通流中，不该挂图钉）；分类页
-     * 作用域内的置顶帖为 true；第 2 页起与非列表场景（详情 / Console / UC）恒为 false。</p>
+     * 仅本分类的置顶帖为 true（子分类置顶混在一级分类页普通流中，不挂图钉）；
+     * 第 2 页起与非列表场景（详情 / Console / UC）恒为 false。</p>
      */
     private Boolean pinnedInView;
 

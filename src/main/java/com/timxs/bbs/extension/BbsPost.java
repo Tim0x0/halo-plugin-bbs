@@ -111,8 +111,8 @@ public class BbsPost extends AbstractExtension {
         @Schema(description = "发布人 User 的 metadata.name")
         private String owner;
 
-        @Schema(description = "是否置顶：分类页第 1 页顶部；若所属分类树的一级分类开启 "
-                + "pinToHome，则同时出现在首页第 1 页顶部")
+        @Schema(description = "是否置顶：所属分类页第 1 页顶部（不向父分类传染）；"
+                + "若所属分类树的一级分类开启 pinToHome，则同时出现在首页第 1 页顶部")
         private Boolean pinned = false;
 
         @Schema(description = "置顶排序优先级，值越大越靠前")

@@ -406,7 +406,8 @@
           <!-- 右列圆标顺序恒定：公告→置顶→问答→已解决；
                讨论帖无圆标；已解决仅线框勾，不叠问答圆标。
                置顶用 pinnedInView（本视图是否真浮顶）而非 pinned：首页里所属分类
-               未开「置顶帖上首页」的置顶帖混在普通流中，不挂图钉 -->
+               未开「置顶帖上首页」的置顶帖、一级分类页里的子分类置顶（不向父
+               分类传染）都混在普通流中，不挂图钉 -->
           <span class="bbs-bic bbs-bic--ann" th:if="${p.type == 'ANNOUNCEMENT'}" title="公告" aria-label="公告"><svg viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M480 32c0-12.9-7.8-24.6-19.8-29.6s-25.7-2.2-34.9 6.9L381.7 53c-48 48-113.1 75-181 75l-8.7 0-32 0-96 0c-35.3 0-64 28.7-64 64l0 96c0 35.3 28.7 64 64 64l0 128c0 17.7 14.3 32 32 32l64 0c17.7 0 32-14.3 32-32l0-128 8.7 0c67.9 0 133 27 181 75l43.6 43.6c9.2 9.2 22.9 11.9 34.9 6.9s19.8-16.6 19.8-29.6l0-147.6c18.6-8.8 32-32.5 32-60.4s-13.4-51.6-32-60.4L480 32z"/></svg></span>
           <span class="bbs-bic bbs-bic--pin" th:if="${p.pinnedInView}" title="置顶" aria-label="置顶"><svg viewBox="0 0 384 512" fill="currentColor" aria-hidden="true"><path d="M32 32C32 14.3 46.3 0 64 0L320 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-29.5 0 11.4 148.2c36.7 19.9 65.7 53.2 79.5 94.7l1 3c3.3 9.8 1.6 20.5-4.4 28.8s-15.7 13.3-26 13.3L32 352c-10.3 0-19.9-4.9-26-13.3s-7.7-19-4.4-28.8l1-3c13.8-41.5 42.8-74.8 79.5-94.7L93.5 64 64 64C46.3 64 32 49.7 32 32zM160 384l64 0 0 96c0 17.7-14.3 32-32 32s-32-14.3-32-32l0-96z"/></svg></span>
           <span class="bbs-bic bbs-bic--qa" th:if="${p.type == 'QUESTION' and !p.solved}" title="问答" aria-label="问答"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.4 8a3.6 3.6 0 1 1 5.3 3.1c-1 .55-1.7 1.3-1.7 2.6v.9"/><circle cx="12" cy="18.6" r="1.6" fill="currentColor" stroke="none"/></svg></span>
