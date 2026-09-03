@@ -203,6 +203,14 @@ public class BbsPostService {
             validateDraftRequest(request, policy, existingType);
 
             if (spec.getPhase() == BbsPost.Phase.PUBLISHED) {
+                // 对齐官方：无需重审且无待审核稿时设置保存即生效；
+                // 否则走工作稿流，标题不 bypass 审核
+                var pendingDraft = spec.getDraft() != null
+                        && spec.getDraft().getPhase() == BbsPost.Phase.PENDING;
+                if (!pendingDraft && !(policy.required() && policy.editNeedsReview())) {
+                    return savePublishedImmediate(post, request, false, existingType,
+                            name, owner);
+                }
                 var draft = applyDraftRequest(spec, request, false, existingType);
                 var submitted = draft.getPhase() == BbsPost.Phase.PENDING;
                 var before = HeadState.of(post);
@@ -355,6 +363,14 @@ public class BbsPostService {
                             validateRequest(request, true, policy, existingType);
 
                             if (spec.getPhase() == BbsPost.Phase.PUBLISHED) {
+                                // 管理端天然免审：无待审核稿时设置保存即生效；
+                                // 有待审核稿（作者送审中）仍走工作稿流，不越权绕过审核
+                                var pendingDraft = spec.getDraft() != null
+                                        && spec.getDraft().getPhase() == BbsPost.Phase.PENDING;
+                                if (!pendingDraft) {
+                                    return savePublishedImmediate(post, request, true,
+                                            existingType, name, actor);
+                                }
                                 var draft = applyDraftRequest(spec, request, true,
                                         existingType);
                                 var before = HeadState.of(post);
@@ -399,6 +415,43 @@ public class BbsPostService {
                                     });
                         }))
                         .flatMap(this::flushModerationRecords)));
+    }
+
+    /**
+     * 对齐官方：已发布帖免重审编辑时设置保存即生效。
+     *
+     * <p>元数据（标题 / 别名 / 类型 / 分类 / 摘要）直写 {@code spec}，前台立即读到；
+     * 正文只更新 {@code headSnapshot}，前台继续读 {@code releaseSnapshot} 直到显式
+     * 发布——与官方「spec 即生效、快照需发布」模型一致。已存在的工作稿（非待审核）
+     * 同步更新元数据，避免编辑器 draft??spec 读到旧值，phase / 时间戳保持原样。
+     * 调用方负责免审判定：Console 天然免审，UC 按「编辑已发布是否重新审核」；
+     * 待审核稿一律继续走草稿流（保存不改审核状态，WordPress 式）。</p>
+     */
+    private Mono<BbsPost> savePublishedImmediate(BbsPost post, PostRequest request,
+            boolean managed, BbsPost.PostType existingType, String name, String actor) {
+        var spec = post.getSpec();
+        var oldSlug = spec.getSlug();
+        applyRequest(spec, request, managed, existingType);
+        if (spec.getDraft() != null) {
+            applyDraftRequest(spec, request, managed, existingType);
+        }
+        var before = HeadState.of(post);
+        // 别名立即公开，唯一性必须当场校验（草稿阶段才允许暂重名）
+        var slugMono = !Objects.equals(oldSlug, spec.getSlug())
+                ? resolveSlug(spec.getSlug(), name)
+                : Mono.just(spec.getSlug());
+        return requireCategory(spec.getCategoryName())
+                .then(slugMono)
+                .doOnNext(spec::setSlug)
+                .then(Mono.defer(() -> contentService.prepareHead(
+                        post, request.getContent(), actor)))
+                .doOnNext(updated -> {
+                    stampEditTime(post, before);
+                    if (before.changedIn(updated) && spec.getDraft() != null) {
+                        // WordPress 式：被驳回的修改稿一经修改，驳回原因随之失效
+                        spec.getDraft().setRejectReason(null);
+                    }
+                });
     }
 
     /**
