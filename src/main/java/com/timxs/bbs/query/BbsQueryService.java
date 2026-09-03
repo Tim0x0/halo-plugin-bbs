@@ -929,6 +929,25 @@ public class BbsQueryService {
         return assembleEditingVos(List.of(post), true).map(list -> list.get(0));
     }
 
+    /**
+     * 装配预览详情（官方 {@code PreviewRouterFunction} 语义）：工作稿口径同编辑器
+     * （标题 / 分类 / 摘要取 draft），正文默认 headSnapshot，snapshotName 非空且不等于
+     * head 时改读指定快照（历史版本预览）。仅预览路由调用，该路由自带作者鉴权。
+     */
+    public Mono<BbsPostVo> assemblePreviewDetail(BbsPost post, String snapshotName) {
+        var head = post.getSpec().getHeadSnapshot();
+        if (StringUtils.isBlank(snapshotName) || Objects.equals(snapshotName, head)) {
+            return assembleEditingDetail(post);
+        }
+        return Mono.zip(assembleEditingDetail(post),
+                        contentService.resolveContent(post, snapshotName))
+                .map(tuple -> {
+                    var vo = tuple.getT1();
+                    vo.setContent(tuple.getT2());
+                    return vo;
+                });
+    }
+
     /** 已发布帖子总数（含公告）。 */
     public Mono<Long> countPublished() {
         var options = ListOptions.builder()

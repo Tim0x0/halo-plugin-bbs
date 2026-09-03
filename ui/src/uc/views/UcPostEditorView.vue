@@ -10,6 +10,7 @@ import {
   VModal,
   VSpace,
   Toast,
+  IconEye,
   IconSave,
   IconSettings,
   IconSendPlaneFill,
@@ -26,6 +27,7 @@ import RiHistoryLine from '~icons/ri/history-line'
 import PostEditorFrame from '@/shared/PostEditorFrame.vue'
 import PostSettingForm from '@/shared/PostSettingForm.vue'
 import PostDetailPanel from '@/shared/PostDetailPanel.vue'
+import PostPreviewModal from '@/shared/PostPreviewModal.vue'
 import { publicApi, ucApi } from '@/api/bbs'
 import { BBS_TYPE_LABELS, bbsStatusText } from '@/utils/post-labels'
 import { contentStats } from '@/utils/content-stats'
@@ -501,6 +503,31 @@ useSessionKeepAlive()
 
 const settingSnapshot = ref('')
 
+// 预览对齐官方 PostEditor.handlePreview：先静默保存（预览即编辑器最新内容），
+// 再弹预览窗（PostPreviewModal，官方 UrlPreviewModal 同款）。后端读工作副本，
+// 作者身份由服务端校验（UC 里本来就是自己的帖子）
+const previewModalVisible = ref(false)
+const previewPending = ref(false)
+
+async function preview() {
+  if (!editorReady.value || previewPending.value) {
+    return
+  }
+  previewPending.value = true
+  try {
+    await handleSave({ mute: true })
+    if (editName.value) {
+      previewModalVisible.value = true
+    }
+  } finally {
+    previewPending.value = false
+  }
+}
+
+const previewUrl = computed(() =>
+  editName.value ? `/bbs/preview/${editName.value}` : ''
+)
+
 function openSetting(submit = false) {
   if (!editorReady.value || saving.value) {
     return
@@ -610,6 +637,10 @@ onMounted(async () => {
           <template #icon><RiHistoryLine /></template>
           历史版本
         </VButton>
+        <VButton size="sm" :disabled="!editorReady" :loading="previewPending" @click="preview">
+          <template #icon><IconEye /></template>
+          预览
+        </VButton>
         <VButton
           size="sm"
           :disabled="!editorReady"
@@ -677,6 +708,13 @@ onMounted(async () => {
       </VSpace>
     </template>
   </VModal>
+
+  <PostPreviewModal
+    v-if="previewModalVisible"
+    :title="formData.title"
+    :url="previewUrl"
+    @close="previewModalVisible = false"
+  />
 
 </template>
 

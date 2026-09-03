@@ -429,13 +429,42 @@
       </div>
     </div>
 
-    <!-- 分页（保留分类 / 关键词 / 排序 / 类型） -->
+    <!-- 分页（保留分类 / 关键词 / 排序 / 类型）：
+         桌面=页码窗口（pageWindow 由后端算，null=省略号）；窄屏退回 n/总页数 计数 -->
     <nav class="bbs-pg" th:if="${posts.total > posts.size}"
          th:with="totalPages=${(posts.total + posts.size - 1) / posts.size}">
       <a class="bbs-pg__btn" th:if="${currentPage > 1}"
          th:href="@{/bbs(page=${currentPage - 1}, category=${currentCategory}, q=${keyword}, sort=${currentSort}, type=${currentType})}">‹ 上一页</a>
       <span class="bbs-pg__btn is-disabled" th:if="${currentPage <= 1}">‹ 上一页</span>
-      <span class="bbs-pg__info" th:text="|${currentPage} / ${totalPages}|">1 / 1</span>
+      <span class="bbs-pg__nums">
+        <th:block th:each="p : ${pageWindow}">
+          <span class="bbs-pg__gap" th:if="${p == null}">…</span>
+          <span class="bbs-pg__num is-current" aria-current="page"
+                th:if="${p != null and p == currentPage}" th:text="${p}">1</span>
+          <a class="bbs-pg__num" th:if="${p != null and p != currentPage}"
+             th:href="@{/bbs(page=${p}, category=${currentCategory}, q=${keyword}, sort=${currentSort}, type=${currentType})}"
+             th:text="${p}">2</a>
+        </th:block>
+      </span>
+      <!-- 窄屏：计数 chip，点开下拉选页（复用 pageWindow；桌面隐藏，见 CSS 断点） -->
+      <div class="bbs-drop bbs-pg__pick">
+        <button type="button" class="bbs-pg__pickbtn" data-drop-toggle aria-haspopup="true">
+          <span th:text="|${currentPage} / ${totalPages}|">1 / 1</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <!-- 面板与桌面同款页码窗口（pageWindow：首页/末页 + 当前页邻域，null=省略号） -->
+        <div class="bbs-drop__panel bbs-pg__panel">
+          <th:block th:each="p : ${pageWindow}">
+            <span class="bbs-pg__gap" th:if="${p == null}">…</span>
+            <span class="bbs-pg__num is-current" aria-current="page"
+                  th:if="${p != null and p == currentPage}" th:text="${p}">1</span>
+            <a class="bbs-pg__num" th:if="${p != null and p != currentPage}"
+               th:href="@{/bbs(page=${p}, category=${currentCategory}, q=${keyword}, sort=${currentSort}, type=${currentType})}"
+               th:text="${p}">2</a>
+          </th:block>
+        </div>
+      </div>
       <a class="bbs-pg__btn" th:if="${currentPage < totalPages}"
          th:href="@{/bbs(page=${currentPage + 1}, category=${currentCategory}, q=${keyword}, sort=${currentSort}, type=${currentType})}">下一页 ›</a>
       <span class="bbs-pg__btn is-disabled" th:if="${currentPage >= totalPages}">下一页 ›</span>

@@ -53,6 +53,23 @@
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* 页脚钉住视口底：空态 / 短内容页不再悬在屏幕中间。
+     顶栏 sticky 在 flex 列容器里行为不变 */
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh; /* 移动端浏览器地址栏 */
+}
+
+/* .bbs-body 是 flex 列容器后：直接子元素的水平 auto margin 优先于
+   align-items: stretch，元素不再被拉伸，宽度塌缩成内容宽（max-content）
+   —— 限宽容器会「挤成一团」。靠 margin: 0 auto 居中的顶层容器必须
+   显式 width: 100%，才能恢复「撑满 → max-width 限宽 → auto margin 居中」
+   的块级表现 */
+.bbs-cols,
+.bbs-pcols,
+.bbs-notice {
+  width: 100%;
 }
 
 a {
@@ -1136,16 +1153,112 @@ a.bbs-stag:hover {
   pointer-events: none;
 }
 
-.bbs-pg__info {
+/* 窄屏选页：计数 chip + 下拉页码窗口（桌面隐藏，≤800px 显示） */
+.bbs-pg__pick {
+  display: none;
+}
+
+.bbs-pg__pickbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--b-line);
+  border-radius: 6px;
+  color: var(--b-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: var(--b-tr);
+}
+
+.bbs-pg__pickbtn svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--b-text-3);
+  /* 面板向上弹，箭头默认朝上指示方向 */
+  transform: rotate(180deg);
+  transition: transform 0.15s ease;
+}
+
+.bbs-pg__pick.open .bbs-pg__pickbtn svg {
+  transform: rotate(0deg);
+}
+
+/* 面板向上弹（分页恒在内容流底部，下方只剩页脚，贴底视口向下会甩出屏幕；
+   上方永远有列表垫着）；水平居中于触发器；页码折行（窗口满配 9 项，窄屏最多折两行） */
+.bbs-pg__panel {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 24px);
+}
+
+.bbs-drop.open .bbs-pg__panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 覆盖 .bbs-drop__panel a 的整行项样式，恢复方形页码按钮 */
+.bbs-pg__panel a.bbs-pg__num {
+  width: auto;
+  padding: 0 8px;
+  gap: 0;
+  font-size: 13px;
+}
+
+/* 页码窗口：与 .bbs-pg__btn 同族（描边 + 6px 圆角），等宽方形 */
+.bbs-pg__nums {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bbs-pg__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--b-line);
+  border-radius: 6px;
+  color: var(--b-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: var(--b-tr);
+}
+
+.bbs-pg__num:hover {
+  background: var(--b-hover);
+  color: var(--b-text);
+}
+
+/* 当前页：与主按钮一致的实底主题色 */
+.bbs-pg__num.is-current,
+.bbs-pg__num.is-current:hover {
+  background: var(--b-accent);
+  border-color: var(--b-accent);
+  color: #fff;
+}
+
+.bbs-pg__gap {
+  padding: 0 2px;
   font-size: 12.5px;
   color: var(--b-text-3);
-  font-variant-numeric: tabular-nums;
 }
 
 /* 页脚：声明 + © {年} {站点名}（链博客首页）+ Powered by（链 GitHub） */
 .bbs-foot {
   border-top: 1px solid var(--b-line);
-  margin-top: 8px;
+  /* 剩余空间吃满时自动贴底（配合 .bbs-body 的 min-height）；
+     内容撑满时间距由 .bbs-cols 的 48px 底边距承担 */
+  margin-top: auto;
   padding: 22px 16px 28px;
   text-align: center;
   font-size: 12.5px;
@@ -1818,6 +1931,15 @@ a.bbs-post__name:hover {
 
   .bbs-fab {
     display: grid;
+  }
+
+  /* 分页：页码窗口隐藏，退回计数 chip（点开下拉选页） */
+  .bbs-pg__nums {
+    display: none;
+  }
+
+  .bbs-pg__pick {
+    display: block;
   }
 
   /* 列表条目改网格：

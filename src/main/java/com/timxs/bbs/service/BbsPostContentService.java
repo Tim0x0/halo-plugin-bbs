@@ -340,6 +340,33 @@ public class BbsPostContentService {
     }
 
     /**
+     * 预览用：按指定快照还原单帖正文（snapshotName 空 = headSnapshot），对齐官方
+     * {@code PreviewRouterFunction} 的 snapshotName 参数。快照缺失 / 不属于本帖 /
+     * 差异损坏一律返回空串——预览不该因历史数据损坏而 500。
+     */
+    public Mono<String> resolveContent(BbsPost post, String snapshotName) {
+        var spec = post.getSpec();
+        String targetName = StringUtils.isNotBlank(snapshotName)
+                ? snapshotName : spec.getHeadSnapshot();
+        if (StringUtils.isBlank(targetName) || StringUtils.isBlank(spec.getBaseSnapshot())) {
+            return Mono.just("");
+        }
+        return Mono.zip(client.fetch(Snapshot.class, targetName),
+                        client.fetch(Snapshot.class, spec.getBaseSnapshot()))
+                .filter(tuple -> belongsTo(tuple.getT1(), post)
+                        && belongsTo(tuple.getT2(), post))
+                .map(tuple -> {
+                    try {
+                        return clean(ContentWrapper
+                                .patchSnapshot(tuple.getT1(), tuple.getT2()).getContent());
+                    } catch (RuntimeException ignored) {
+                        return "";
+                    }
+                })
+                .defaultIfEmpty("");
+    }
+
+    /**
      * 列出一个 BbsPost 的全部 Snapshot（官方语义：subjectRef 精确匹配 + 排除删除中，
      * 创建时间降序）。可见性完全跟随帖子——调用方校验过帖子可读，快照就全量可读。
      */

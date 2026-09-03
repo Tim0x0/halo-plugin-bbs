@@ -3,17 +3,21 @@ package com.timxs.bbs.router;
 import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
+import com.timxs.bbs.extension.BbsPost;
 import com.timxs.bbs.finder.BbsFinder;
+import com.timxs.bbs.query.BbsQueryService;
 import com.timxs.bbs.service.BbsHeaderMenuService;
 import com.timxs.bbs.service.BbsRoles;
 import com.timxs.bbs.service.BbsSettings;
 import com.timxs.bbs.util.BbsPageRequests;
+import com.timxs.bbs.util.BbsPageWindow;
 import com.timxs.bbs.util.BbsTimeFormats;
 import com.timxs.bbs.vo.BbsPostVo;
 import com.timxs.bbs.vo.CategoryVo;
 import com.timxs.bbs.vo.OwnerVo;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.Year;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -89,12 +93,13 @@ public class BbsRouter {
     private final RoleService roleService;
     private final ExternalUrlSupplier externalUrlSupplier;
     private final BbsHeaderMenuService headerMenuService;
+    private final BbsQueryService bbsQueryService;
 
     public BbsRouter(BbsFinder bbsFinder, TemplateNameResolver templateNameResolver,
             BbsSettings settings, SystemInfoGetter systemInfoGetter,
             ReactiveExtensionClient client, BbsTimeFormats bbsTimeFormats,
             RoleService roleService, ExternalUrlSupplier externalUrlSupplier,
-            BbsHeaderMenuService headerMenuService) {
+            BbsHeaderMenuService headerMenuService, BbsQueryService bbsQueryService) {
         this.bbsFinder = bbsFinder;
         this.templateNameResolver = templateNameResolver;
         this.settings = settings;
@@ -104,12 +109,14 @@ public class BbsRouter {
         this.roleService = roleService;
         this.externalUrlSupplier = externalUrlSupplier;
         this.headerMenuService = headerMenuService;
+        this.bbsQueryService = bbsQueryService;
     }
 
     @Bean
     RouterFunction<ServerResponse> bbsRouterFunction() {
         return route(GET("/bbs"), listHandler())
-                .andRoute(GET("/bbs/post/{slug:\\S+}"), detailHandler());
+                .andRoute(GET("/bbs/post/{slug:\\S+}"), detailHandler())
+                .andRoute(GET("/bbs/preview/{name:\\S+}"), previewHandler());
     }
 
     /** 前台列表排序白名单：最后活跃（默认）/ 最新发布 / 热门。 */
@@ -159,9 +166,14 @@ public class BbsRouter {
             String siteTitle, int page, String categorySlug, String keyword, String sort,
             String type, Mono<CategoryVo> categoryVo, String categoryTitle) {
         var posts = bbsFinder.list(page, cfg.pageSize(), categorySlug, keyword, sort,
-                type.isEmpty() ? null : type);
+                type.isEmpty() ? null : type)
+                // 页码窗口也要订阅这个 Mono，cache 住避免查两遍
+                .cache();
         Map<String, Object> model = new HashMap<>();
         model.put("posts", posts);
+        // 页码窗口：首页 / 末页 + 当前页 ±1，null = 省略号（模板按序渲染）
+        model.put("pageWindow", posts.map(lr -> BbsPageWindow.window(page,
+                BbsPageWindow.totalPages(lr.getTotal(), lr.getSize()))));
         model.put("categories", bbsFinder.listCategoryTree().collectList());
         model.put("currentCategory", categorySlug);
         model.put("currentCategoryVo", categoryVo);
@@ -235,6 +247,68 @@ public class BbsRouter {
                     })
                     .switchIfEmpty(Mono.error(new ResponseStatusException(
                             HttpStatus.NOT_FOUND, "帖子不存在")));
+        });
+    }
+
+    /**
+     * 预览（对齐官方 {@code PreviewRouterFunction}）：读工作副本渲染详情页模板。
+     * 语义逐条照搬官方：须登录；仅作者本人可预览（一律 404，不暴露帖子存在性）；
+     * 正文默认 headSnapshot，{@code snapshotName} 参数可指历史版本；未发布字段兜底。
+     * 路径在 BBS 命名空间内（官方 /preview/posts/* 是核心 Post 的）。官方的
+     * SKIP_TRACKER 不适用：访问统计脚本只在模型含 groupVersionKind / plural 时注入，
+     * BBS 模型从不提供（见 renderPreview）。
+     */
+    private HandlerFunction<ServerResponse> previewHandler() {
+        return request -> Mono.zip(loadConfig(), currentUser(), siteTitle()).flatMap(tuple -> {
+            var cfg = tuple.getT1();
+            var me = tuple.getT2().orElse(null);
+            if (me == null) {
+                return Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "帖子不存在"));
+            }
+            String name = request.pathVariable("name");
+            String snapshotName = request.queryParam("snapshotName")
+                    .filter(StringUtils::isNotBlank).orElse(null);
+            return client.fetch(BbsPost.class, name)
+                    .filter(post -> me.getName().equals(post.getSpec().getOwner()))
+                    .flatMap(post -> bbsQueryService
+                            .assemblePreviewDetail(post, snapshotName)
+                            .doOnNext(vo -> {
+                                // 未发布字段兜底（官方同款）：模板时间渲染不炸
+                                if (vo.getPublishTime() == null) {
+                                    vo.setPublishTime(Instant.now());
+                                }
+                                if (vo.getLastActivityTime() == null) {
+                                    vo.setLastActivityTime(vo.getPublishTime());
+                                }
+                            })
+                            .flatMap(vo -> renderPreview(request, cfg, me, tuple.getT3(), vo)))
+                    .switchIfEmpty(Mono.error(new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "帖子不存在")));
+        });
+    }
+
+    /** 预览渲染：模型与详情页一致（复用同一套模板，主题覆盖同样生效）。 */
+    private Mono<ServerResponse> renderPreview(ServerRequest request, BbsConfig cfg,
+            OwnerVo me, String siteTitle, BbsPostVo post) {
+        Map<String, Object> model = new HashMap<>();
+        model.put("post", post);
+        model.put("relatedPosts", loadRelated(post, cfg.relatedPostCount(),
+                cfg.relatedPostStrategy()));
+        model.put("relatedStrategy", cfg.relatedPostStrategy());
+        model.put("bbsTitle", cfg.pageTitle());
+        model.put("title", post.getTitle());
+        model.put("documentTitle", cfg.documentTitle(post.getTitle(), cfg.pageTitle()));
+        // 预览页不进索引：不设 canonical（模板已做空值守卫）。官方另设 SKIP_TRACKER
+        // 跳过访问统计脚本注入，但该脚本只在模型含 groupVersionKind / plural 时注入，
+        // BBS 模型从不提供这两个变量——本来就不会注入，无需跳过（该类也不在插件 API 包内）
+        putCommonModel(model, request, cfg, me, siteTitle);
+        model.put(ModelConst.TEMPLATE_ID, "bbs_post");
+        return hasAdminPermission(me.getName()).flatMap(hasAdmin -> {
+            model.put("hasAdminPermission", hasAdmin);
+            return templateNameResolver
+                    .resolveTemplateNameOrDefault(request.exchange(), "bbs_post")
+                    .flatMap(template -> ServerResponse.ok().render(template, model));
         });
     }
 

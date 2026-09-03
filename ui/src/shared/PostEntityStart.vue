@@ -96,35 +96,47 @@ const isEdited = computed(() => Boolean(props.post.edited))
 <template>
   <VEntityField :title="post.title" max-width="30rem" :route="titleRoute as any">
     <template #extra>
-      <!-- 未发布内容状态（官方 inProgress 的位置，口径：head ≠ release 不分发布态） -->
-      <VStatusDot
+      <!-- 未发布内容状态（官方 inProgress 的位置，口径：head ≠ release 不分发布态）。
+           extra 容器无 gap，间距靠元素自身 margin（同官方 .entity-field-title 的
+           0.5rem 节奏），三个点各包一层 .entity-status-dot 给右侧留白 -->
+      <span
         v-if="post.phase === 'PUBLISHED' && post.draftPhase === 'PENDING'"
-        v-tooltip="'修改稿待审核；前台仍是已发布版本'"
-        state="warning"
-        animate
-      />
-      <VStatusDot
+        class="entity-status-dot"
+      >
+        <VStatusDot v-tooltip="'修改稿待审核；前台仍是已发布版本'" state="warning" animate />
+      </span>
+      <span
         v-else-if="post.phase === 'PUBLISHED' && post.draftPhase === 'REJECTED'"
-        v-tooltip="post.rejectReason ? `修改稿驳回原因：${post.rejectReason}` : '修改稿已被驳回'"
-        state="error"
-        animate
-      />
+        class="entity-status-dot"
+      >
+        <VStatusDot
+          v-tooltip="post.rejectReason ? `修改稿驳回原因：${post.rejectReason}` : '修改稿已被驳回'"
+          state="error"
+          animate
+        />
+      </span>
       <!-- 未发布态（未发布/待审核/已驳回）正文整体未发布，等价官方 head ≠ release，
            同样打绿点；hasDraft 只对已发布帖计算，不能单独作为绿点条件 -->
-      <VStatusDot
+      <span
         v-else-if="post.phase !== 'PUBLISHED' || post.hasDraft"
-        v-tooltip="
-          post.phase === 'PUBLISHED'
-            ? '存在未提交的修改；前台仍是已发布版本'
-            : '存在未发布的内容'
-        "
-        state="success"
-        animate
-      />
-      <VTag v-if="typeTag" :styles="typeTag.styles">
-        <template #leftIcon><component :is="typeTag.icon" class="entity-type__icon" /></template>
-        {{ typeTag.label }}
-      </VTag>
+        class="entity-status-dot"
+      >
+        <VStatusDot
+          v-tooltip="
+            post.phase === 'PUBLISHED'
+              ? '存在未提交的修改；前台仍是已发布版本'
+              : '存在未发布的内容'
+          "
+          state="success"
+          animate
+        />
+      </span>
+      <span v-if="typeTag" class="entity-type">
+        <VTag :styles="typeTag.styles">
+          <template #leftIcon><component :is="typeTag.icon" class="entity-type__icon" /></template>
+          {{ typeTag.label }}
+        </VTag>
+      </span>
 
       <span v-if="marks.length" class="entity-marks">
         <span
@@ -138,10 +150,12 @@ const isEdited = computed(() => Boolean(props.post.edited))
         </span>
       </span>
 
+      <!-- 外链图标对齐官方：已发布→前台链接；未发布→预览路由（仅作者可看，
+           其他人点开是 404——官方列表同款行为） -->
       <a
-        v-if="post.phase === 'PUBLISHED' && post.permalink"
+        v-if="post.phase !== 'PUBLISHED' || post.permalink"
         target="_blank"
-        :href="post.permalink"
+        :href="post.phase === 'PUBLISHED' ? post.permalink : `/bbs/preview/${post.name}`"
         class="entity-permalink"
         @click.stop
       >
@@ -175,6 +189,22 @@ const isEdited = computed(() => Boolean(props.post.edited))
 </template>
 
 <style scoped>
+/* extra 容器（.entity-field-title-body）无 gap，间距全靠元素自身右边距，
+   节奏对齐官方 .entity-field-title 的 margin-right: .5rem：
+   状态点 0.5rem，类型徽标 / 属性图标组 0.25rem */
+.entity-status-dot {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  margin-right: 0.5rem;
+}
+
+.entity-type {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.25rem;
+}
+
 .entity-type__icon {
   width: 0.75rem;
   height: 0.75rem;
@@ -185,7 +215,7 @@ const isEdited = computed(() => Boolean(props.post.edited))
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  margin-left: 0.25rem;
+  margin-right: 0.25rem;
 }
 
 .entity-mark {
