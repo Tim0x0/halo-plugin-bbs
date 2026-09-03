@@ -23,7 +23,7 @@
 #   - 正文由 release notes（Markdown）经 pandoc 转 HTML 后提交，服务端会再过白名单净化。
 #   - 与 cd.yaml 同时被 release 事件触发，会轮询等待 CD 把 jar 资产传完再拼下载链接。
 
-name: Release 发帖
+name: 同步 BBS 公告
 
 on:
   release:
@@ -57,6 +57,9 @@ jobs:
       BBS_CATEGORY_NAME: ${{ vars.BBS_CATEGORY_NAME }}
       BBS_PROJECT_NAME: ${{ vars.BBS_PROJECT_NAME }}
     steps:
+      - name: 安装 pandoc
+        run: sudo apt-get update && sudo apt-get install -y pandoc
+
       - name: 校验配置
         env:
           BBS_POST_PAT: ${{ secrets.BBS_POST_PAT }}
@@ -78,9 +81,11 @@ jobs:
           INPUT_STATUS: ${{ inputs.status }}
           INPUT_TITLE: ${{ inputs.title }}
         run: |
-          # release 事件直接读事件负载；手动运行按 tag 从仓库 release 列表里找
+          # release 事件直接读事件负载；手动运行按 tag 从仓库 release 列表里找。
+          # 事件负载把 release 对象嵌在 .release 下（顶层是 action/repository/sender），
+          # 须解包取 .release，后面的 .id/.assets/.tag_name 才取得到。
           if [ "$GITHUB_EVENT_NAME" = "release" ]; then
-            cp "$GITHUB_EVENT_PATH" release.json
+            jq '.release' "$GITHUB_EVENT_PATH" > release.json
           else
             gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > releases.json
             jq --arg tag "$INPUT_TAG" '[.[] | select(.tag_name == $tag)] | first' \

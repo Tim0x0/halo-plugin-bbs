@@ -7,11 +7,7 @@ plugins {
 group 'com.timxs.bbs'
 
 repositories {
-    // 本地联调：interaction-plus api 已 publishToMavenLocal（~/.m2），mavenLocal 优先命中
-    mavenLocal()
     mavenCentral()
-    // interaction-plus api 的 JitPack 坐标：CI/CD 构建机没有 mavenLocal，必须启用。
-    // 前提：Tim0x0/halo-plugin-interaction-plus 已打 1.0.0 tag（其 jitpack.yml 已就绪）。
     maven { url 'https://jitpack.io' }
 }
 
@@ -20,7 +16,9 @@ dependencies {
     compileOnly 'run.halo.app:api'
 
     // interaction-plus 对外 API 契约（接口 + DTO）：运行时由 interaction-plus 提供，不打进产物。
-    compileOnly 'com.github.Tim0x0.halo-plugin-interaction-plus:api:1.0.0'
+    // 坐标按 JitPack 实际产物：自定义 install 命令下 JitPack 把 publishToMavenLocal 的
+    // 构件归一到仓库级扁平坐标（group=用户、artifact=仓库名），模块坐标 :api: 并不对外。
+    compileOnly 'com.github.Tim0x0:halo-plugin-interaction-plus:1.0.0'
 
     // plugin-feed 对外 API 契约（RssRouteItem / RSS2）：运行时由 PluginFeed 提供，不打进产物。
     // 坐标钉死 1.4.4——Maven Central 上 run.halo.feed:api 的稳定版（含 RssRouteItem 扩展点）
