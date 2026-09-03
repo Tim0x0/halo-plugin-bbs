@@ -63,15 +63,18 @@ public class BbsPostService {
     private final BbsModerationScope moderationScope;
     private final BbsPostContentService contentService;
     private final BbsModerationRecordService moderationRecordService;
+    private final BbsModerationNotificationService moderationNotificationService;
 
     public BbsPostService(ReactiveExtensionClient client, BbsSettings settings,
             BbsModerationScope moderationScope, BbsPostContentService contentService,
-            BbsModerationRecordService moderationRecordService) {
+            BbsModerationRecordService moderationRecordService,
+            BbsModerationNotificationService moderationNotificationService) {
         this.client = client;
         this.settings = settings;
         this.moderationScope = moderationScope;
         this.contentService = contentService;
         this.moderationRecordService = moderationRecordService;
+        this.moderationNotificationService = moderationNotificationService;
     }
 
     /**
@@ -137,6 +140,7 @@ public class BbsPostService {
                             .onErrorResume(error -> client.delete(created)
                                     .onErrorResume(ignored -> Mono.empty())
                                     .then(Mono.error(error))))
+                    .flatMap(this::subscribeModerationNotifications)
                     .flatMap(this::flushModerationRecords);
         });
     }
@@ -177,7 +181,8 @@ public class BbsPostService {
                                     request.getContent(), owner, false)
                             .onErrorResume(error -> client.delete(created)
                                     .onErrorResume(ignored -> Mono.empty())
-                                    .then(Mono.error(error))));
+                                    .then(Mono.error(error))))
+                    .flatMap(this::subscribeModerationNotifications);
         });
     }
 
@@ -198,13 +203,9 @@ public class BbsPostService {
             validateDraftRequest(request, policy, existingType);
 
             if (spec.getPhase() == BbsPost.Phase.PUBLISHED) {
-                // 撤回留痕的来源状态：改动前的工作稿状态（待审核 / 已驳回）
-                var oldDraftPhase = spec.getDraft() != null && spec.getDraft().getPhase() != null
-                        ? spec.getDraft().getPhase() : BbsPost.Phase.PENDING;
                 var draft = applyDraftRequest(spec, request, false, existingType);
                 var submitted = draft.getPhase() == BbsPost.Phase.PENDING;
-                var reviewed = submitted || draft.getPhase() == BbsPost.Phase.REJECTED;
-                var reviewedSnapshot = reviewed ? spec.getHeadSnapshot() : null;
+                var before = HeadState.of(post);
                 var categoryMono = submitted
                         ? requireCategory(draft.getCategoryName())
                         : requireCategoryIfPresent(draft.getCategoryName());
@@ -217,22 +218,20 @@ public class BbsPostService {
                         .then(Mono.defer(() -> contentService.prepareHead(
                                 post, request.getContent(), owner)))
                         .doOnNext(ignored -> {
-                            if (reviewed) {
-                                withdrawReviewed(ignored, draft, owner,
-                                        reviewedSnapshot, oldDraftPhase);
+                            if (before.changedIn(ignored)) {
+                                draft.setLastEditTime(Instant.now());
+                                // 被驳回的修改稿一经修改即转入「等待修改后重提」，
+                                // 原驳回原因不再适用。状态不动（WordPress 式：
+                                // 保存只更新内容，审核状态只由提交 / 审核改变）
+                                draft.setRejectReason(null);
                             }
                         });
             }
 
-            var reviewed = spec.getPhase() == BbsPost.Phase.PENDING
-                    || spec.getPhase() == BbsPost.Phase.REJECTED;
-            var reviewedSnapshot = reviewed ? spec.getHeadSnapshot() : null;
-            // 撤回留痕的来源状态：改动前的主状态（待审核 / 已驳回）
-            var fromPhase = spec.getPhase();
             applyRequest(spec, request, false, existingType);
             // 未发布内容本身就是工作稿，不应再残留第二层 draft（兼容旁路写入的脏数据）。
             spec.setDraft(null);
-            spec.setLastEditTime(Instant.now());
+            var before = HeadState.of(post);
 
             // DRAFT / REJECTED 的别名只是候选值，不占公开链接；PENDING 已进入发布流程，
             // 无论是否改过 slug 都重新校验，防止草稿阶段的冲突被带入待审核。
@@ -248,12 +247,14 @@ public class BbsPostService {
                     .then(Mono.defer(() -> contentService.prepareHead(
                             post, request.getContent(), owner)))
                     .doOnNext(ignored -> {
-                        if (reviewed) {
-                            withdrawReviewed(ignored, null, owner,
-                                    reviewedSnapshot, fromPhase);
+                        if (before.changedIn(ignored)) {
+                            spec.setLastEditTime(Instant.now());
+                            // 驳回帖修改后原因失效；保持已驳回状态等作者重新提交
+                            spec.setRejectReason(null);
                         }
                     });
-        }).flatMap(this::flushModerationRecords));
+        }).flatMap(this::subscribeModerationNotifications)
+                .flatMap(this::flushModerationRecords));
     }
 
     /**
@@ -279,12 +280,16 @@ public class BbsPostService {
                                 && spec.getDraft().getPhase() != null
                                 ? spec.getDraft().getPhase() : BbsPost.Phase.PUBLISHED;
                         var draft = applyDraftRequest(spec, request, false, existingType);
+                        var before = HeadState.of(post);
                         return requireCategory(draft.getCategoryName())
                                 .then(resolveSlug(draft.getSlug(), name))
                                 .doOnNext(draft::setSlug)
                                 .then(Mono.defer(() -> contentService.prepareHead(
                                         post, request.getContent(), owner)))
                                 .doOnNext(ignored -> {
+                                    if (before.changedIn(ignored)) {
+                                        draft.setLastEditTime(Instant.now());
+                                    }
                                     draft.setRejectReason(null);
                                     boolean pending = policy.required()
                                             && policy.editNeedsReview();
@@ -309,13 +314,16 @@ public class BbsPostService {
                     var fromPhase = spec.getPhase();
                     applyRequest(spec, request, false, existingType);
                     spec.setDraft(null);
-                    spec.setLastEditTime(Instant.now());
+                    var before = HeadState.of(post);
                     return requireCategory(spec.getCategoryName())
                             .then(resolveSlug(spec.getSlug(), name))
                             .doOnNext(spec::setSlug)
                             .then(Mono.defer(() -> contentService.prepareHead(
                                     post, request.getContent(), owner)))
                             .doOnNext(ignored -> {
+                                if (before.changedIn(ignored)) {
+                                    spec.setLastEditTime(Instant.now());
+                                }
                                 spec.setRejectReason(null);
                                 boolean pending = policy.required();
                                 if (pending) {
@@ -333,6 +341,7 @@ public class BbsPostService {
                                                 : BbsPost.Phase.PUBLISHED.name());
                             });
                 }))
+                .flatMap(this::subscribeModerationNotifications)
                 .flatMap(this::flushModerationRecords);
     }
 
@@ -346,14 +355,9 @@ public class BbsPostService {
                             validateRequest(request, true, policy, existingType);
 
                             if (spec.getPhase() == BbsPost.Phase.PUBLISHED) {
-                                var oldDraft = spec.getDraft();
-                                var reviewed = oldDraft != null
-                                        && (oldDraft.getPhase() == BbsPost.Phase.PENDING
-                                        || oldDraft.getPhase() == BbsPost.Phase.REJECTED);
-                                var reviewedSnapshot = reviewed
-                                        ? spec.getHeadSnapshot() : null;
                                 var draft = applyDraftRequest(spec, request, true,
                                         existingType);
+                                var before = HeadState.of(post);
                                 var slugMono = draft.getPhase() == BbsPost.Phase.PENDING
                                         ? resolveSlug(draft.getSlug(), name)
                                         : Mono.just(draft.getSlug());
@@ -363,21 +367,17 @@ public class BbsPostService {
                                         .then(Mono.defer(() -> contentService.prepareHead(post,
                                                 request.getContent(), actor)))
                                         .doOnNext(updated -> {
-                                            if (reviewed) {
-                                                withdrawReviewed(updated, draft, actor,
-                                                        reviewedSnapshot, oldDraft.getPhase());
+                                            if (before.changedIn(updated)) {
+                                                draft.setLastEditTime(Instant.now());
+                                                draft.setRejectReason(null);
                                             }
                                         });
                             }
 
                             var oldSlug = spec.getSlug();
-                            var reviewed = spec.getPhase() == BbsPost.Phase.PENDING
-                                    || spec.getPhase() == BbsPost.Phase.REJECTED;
-                            var reviewedSnapshot = reviewed ? spec.getHeadSnapshot() : null;
-                            var fromPhase = spec.getPhase();
                             applyRequest(spec, request, true, existingType);
                             spec.setDraft(null);
-                            spec.setLastEditTime(Instant.now());
+                            var before = HeadState.of(post);
                             var slugMono = !Objects.equals(oldSlug, spec.getSlug())
                                     ? resolveSlug(spec.getSlug(), name)
                                     : Mono.just(spec.getSlug());
@@ -392,9 +392,9 @@ public class BbsPostService {
                                     .then(Mono.defer(() -> contentService.prepareHead(post,
                                             request.getContent(), actor)))
                                     .doOnNext(updated -> {
-                                        if (reviewed) {
-                                            withdrawReviewed(updated, null, actor,
-                                                    reviewedSnapshot, fromPhase);
+                                        if (before.changedIn(updated)) {
+                                            spec.setLastEditTime(Instant.now());
+                                            spec.setRejectReason(null);
                                         }
                                     });
                         }))
@@ -427,25 +427,53 @@ public class BbsPostService {
                 });
     }
 
+    /** Console：取消提交（仅待审核；版主可代作者撤回）。 */
+    public Mono<BbsPost> withdrawInScope(String name) {
+        return currentUsername().flatMap(actor -> updateWithRetry(name,
+                        post -> requireScope(post)
+                                .flatMap(scoped -> withdrawSubmission(scoped, actor)))
+                .flatMap(this::flushModerationRecords));
+    }
+
+    /** UC：作者撤回自己的提交（仅待审核；锁定 / 回收站帖由归属校验拦截）。 */
+    public Mono<BbsPost> withdrawOwned(String name, String owner) {
+        return updateWithRetry(name, post -> {
+                    checkOwner(post, owner);
+                    requireOwnedWritable(post);
+                    return withdrawSubmission(post, owner);
+                })
+                .flatMap(this::flushModerationRecords);
+    }
+
     /**
-     * 保存时把已提交或被驳回的工作稿退回草稿并留痕撤回。{@code draft} 为 null 表示
-     * 未发布帖直接改 spec 本体。
-     *
-     * <p>快照链不参与审核留痕：已发布帖的原审核版本由 release 指针天然保留，未发布帖的
-     * 历史版本本来就在快照列表里可查可恢复，不需要额外分叉出「证据快照」。</p>
+     * 取消提交公共逻辑：未发布的待审核帖退回草稿；已发布帖的待审核修改稿退回
+     * 草稿态（前台发布版不受影响）；其余状态 400。留撤回审计，快照绑定当时
+     * 的 head 工作版本。保存不再自动触发——撤回是显式动作。
      */
-    private void withdrawReviewed(BbsPost post, BbsPost.Draft draft, String actor,
-            String reviewedSnapshot, BbsPost.Phase fromPhase) {
-        if (draft != null) {
+    private Mono<BbsPost> withdrawSubmission(BbsPost post, String actor) {
+        var spec = post.getSpec();
+        if (spec.getPhase() == BbsPost.Phase.PENDING) {
+            spec.setPhase(BbsPost.Phase.DRAFT);
+            spec.setRejectReason(null);
+            moderationRecordService.enqueue(post,
+                    BbsModerationRecord.Action.SUBMISSION_WITHDRAWN, actor,
+                    "撤回提交", BbsPost.Phase.PENDING.name(),
+                    BbsPost.Phase.DRAFT.name(), spec.getHeadSnapshot());
+            return Mono.just(post);
+        }
+        var draft = spec.getDraft();
+        if (spec.getPhase() == BbsPost.Phase.PUBLISHED && draft != null
+                && draft.getPhase() == BbsPost.Phase.PENDING) {
             draft.setPhase(BbsPost.Phase.DRAFT);
             draft.setRejectReason(null);
-        } else {
-            post.getSpec().setPhase(BbsPost.Phase.DRAFT);
-            post.getSpec().setRejectReason(null);
+            moderationRecordService.enqueue(post,
+                    BbsModerationRecord.Action.SUBMISSION_WITHDRAWN, actor,
+                    "撤回提交", BbsPost.Phase.PENDING.name(),
+                    BbsPost.Phase.DRAFT.name(), spec.getHeadSnapshot());
+            return Mono.just(post);
         }
-        moderationRecordService.enqueue(post, BbsModerationRecord.Action.SUBMISSION_WITHDRAWN,
-                actor, "内容继续编辑，原审核版本已保留", fromPhase.name(),
-                BbsPost.Phase.DRAFT.name(), reviewedSnapshot);
+        return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "该帖子没有待审核的提交"));
     }
 
     /**
@@ -483,18 +511,23 @@ public class BbsPostService {
                                         }
                                         if (action == BbsModerationRecord.Action.APPROVED) {
                                             var current = scoped.getSpec();
-                                            // 显式括号：PENDING 未发布帖，或带待审核工作稿的已发布帖
-                                            boolean pending = current.getPhase()
+                                            // 待审核或已驳回均可通过（驳回后被推翻直接放行）：
+                                            // 未发布帖看主状态，已发布帖看工作稿状态
+                                            boolean reviewable = current.getPhase()
                                                     == BbsPost.Phase.PENDING
+                                                    || current.getPhase()
+                                                    == BbsPost.Phase.REJECTED
                                                     || (current.getPhase()
                                                     == BbsPost.Phase.PUBLISHED
                                                     && current.getDraft() != null
-                                                    && current.getDraft().getPhase()
-                                                    == BbsPost.Phase.PENDING);
-                                            if (!pending) {
+                                                    && (current.getDraft().getPhase()
+                                                    == BbsPost.Phase.PENDING
+                                                    || current.getDraft().getPhase()
+                                                    == BbsPost.Phase.REJECTED));
+                                            if (!reviewable) {
                                                 return Mono.error(new ResponseStatusException(
                                                         HttpStatus.BAD_REQUEST,
-                                                        "该帖子没有待审核版本"));
+                                                        "该帖子没有待审核或被驳回的版本"));
                                             }
                                         }
                                         return contentService.ensureInitialized(scoped, actor)
@@ -519,6 +552,9 @@ public class BbsPostService {
                                                 });
                                     });
                         }))
+                .flatMap(published -> action == BbsModerationRecord.Action.APPROVED
+                        ? notifyApproved(published, actor)
+                        : Mono.just(published))
                 .flatMap(this::flushModerationRecords));
     }
 
@@ -576,6 +612,7 @@ public class BbsPostService {
                                     BbsPost.Phase.REJECTED.name());
                             return initialized;
                         }))
+                .flatMap(rejected -> notifyRejected(rejected, actor, reason))
                 .flatMap(this::flushModerationRecords));
     }
 
@@ -901,12 +938,7 @@ public class BbsPostService {
                             var before = HeadState.of(scoped);
                             return contentService.prepareHead(scoped,
                                             param.resolvedContent(), actor, param.version())
-                                    .doOnNext(updated -> {
-                                        if (before.changedIn(updated)) {
-                                            updated.getSpec()
-                                                    .setLastEditTime(Instant.now());
-                                        }
-                                    });
+                                    .doOnNext(updated -> stampEditTime(updated, before));
                         })));
     }
 
@@ -918,17 +950,35 @@ public class BbsPostService {
             var before = HeadState.of(post);
             return contentService.prepareHead(post, param.resolvedContent(), owner,
                             param.version())
-                    .doOnNext(updated -> {
-                        if (before.changedIn(updated)) {
-                            updated.getSpec().setLastEditTime(Instant.now());
-                        }
-                    });
+                    .doOnNext(updated -> stampEditTime(updated, before));
         });
     }
 
     /**
-     * 纯正文端点的写入信号：{@code prepareHead} 真正动过快照链（分叉或原地更新）
-     * 才刷新 lastEditTime——无改动的保存 / 重新发布不能把帖子误标成「已编辑」。
+     * 正文保存的编辑时间刷新：快照链真动了才算编辑。
+     *
+     * <p>已发布帖只记工作稿时间——「已编辑」跟着**发布版**走，{@code spec}
+     * 的时间等工作稿被提升时由 {@link #promoteDraft} 同步。否则修改稿还在
+     * 审核中、前台仍是旧版，列表与前台就会提前挂出「已编辑」。无草稿时
+     * 补建一个（正文改动本身就构成未发布修改）。</p>
+     *
+     * <p>未发布帖记 {@code spec}：发布时间尚为 null，怎么记都不会误标。</p>
+     */
+    private static void stampEditTime(BbsPost post, HeadState before) {
+        if (!before.changedIn(post)) {
+            return;
+        }
+        var spec = post.getSpec();
+        if (spec.getPhase() == BbsPost.Phase.PUBLISHED) {
+            ensureDraft(spec).setLastEditTime(Instant.now());
+        } else {
+            spec.setLastEditTime(Instant.now());
+        }
+    }
+
+    /**
+     * 正文写入信号：{@code prepareHead} 真正动过快照链（分叉或原地更新）才刷新
+     * 编辑时间——只改设置或无改动的保存不能把帖子误标成「已编辑」。
      */
     private record HeadState(String headName, Long headVersion) {
 
@@ -1157,6 +1207,19 @@ public class BbsPostService {
                 });
     }
 
+    /** 作者订阅审核结果（幂等）；失败不挡主流程。 */
+    private Mono<BbsPost> subscribeModerationNotifications(BbsPost post) {
+        return moderationNotificationService.subscribe(post).thenReturn(post);
+    }
+
+    private Mono<BbsPost> notifyApproved(BbsPost post, String actor) {
+        return moderationNotificationService.notifyApproved(post, actor).thenReturn(post);
+    }
+
+    private Mono<BbsPost> notifyRejected(BbsPost post, String actor, String reason) {
+        return moderationNotificationService.notifyRejected(post, actor, reason).thenReturn(post);
+    }
+
     /** 把请求体写入 spec：净化正文、兜底摘要；类型经 {@link #resolveType} 统一解析，
      *  管理专属字段（置顶）仅管理端可改。
      *
@@ -1185,6 +1248,9 @@ public class BbsPostService {
     /**
      * 把请求写入已发布帖子的工作稿。首次写入时先从当前发布副本完整复制，确保
      * {@code content=null} 这类“只改设置”请求不会把未随请求提交的正文清空。
+     *
+     * <p>编辑时间不在这里盖：是否算「编辑」以正文是否真改动为准，由调用方在
+     * {@code prepareHead} 之后按 {@link HeadState} 判定——只改设置的保存不算。</p>
      */
     private BbsPost.Draft applyDraftRequest(BbsPost.Spec spec, PostRequest request,
             boolean managed, BbsPost.PostType existingType) {
@@ -1196,7 +1262,6 @@ public class BbsPostService {
         var slug = StringUtils.trimToNull(request.getSlug());
         draft.setSlug(slug != null ? slugify(slug) : slugify(draft.getTitle()));
         draft.setType(resolveType(request, managed, existingType));
-        draft.setLastEditTime(Instant.now());
         if (draft.getPhase() == null || draft.getPhase() == BbsPost.Phase.PUBLISHED) {
             draft.setPhase(BbsPost.Phase.DRAFT);
         }
@@ -1239,8 +1304,11 @@ public class BbsPostService {
         spec.setType(draft.getType() == null ? BbsPost.PostType.POST : draft.getType());
         spec.setCategoryName(draft.getCategoryName());
         spec.setExcerpt(copyExcerpt(draft.getExcerpt()));
-        spec.setLastEditTime(draft.getLastEditTime() != null
-                ? draft.getLastEditTime() : Instant.now());
+        // 工作稿没记到正文编辑时间（只改过设置的保存）就沿用现值，
+        // 补 now 会让从未改过正文的帖子发布后被误标「已编辑」
+        if (draft.getLastEditTime() != null) {
+            spec.setLastEditTime(draft.getLastEditTime());
+        }
         if (spec.getType() != BbsPost.PostType.QUESTION) {
             spec.setSolved(false);
         }

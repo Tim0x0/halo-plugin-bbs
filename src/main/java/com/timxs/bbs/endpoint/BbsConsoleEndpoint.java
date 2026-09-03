@@ -236,6 +236,11 @@ public class BbsConsoleEndpoint implements CustomEndpoint {
                                 .requestBody(requestBodyBuilder().content(contentBuilder()
                                         .schema(schemaBuilder()
                                                 .implementation(RejectRequest.class)))))
+                .PUT("/bbsposts/{name}/withdraw",
+                        req -> ok(postService.withdrawInScope(req.pathVariable("name"))),
+                        builder -> builder.operationId("WithdrawBbsPost").tag(TAG)
+                                .description("取消提交（仅待审核；版主可代作者撤回）")
+                                .parameter(nameParam()))
                 .PUT("/bbsposts/{name}/pin",
                         req -> ok(postService.pin(req.pathVariable("name"))),
                         builder -> builder.operationId("PinBbsPost").tag(TAG)

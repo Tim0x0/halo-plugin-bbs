@@ -553,24 +553,9 @@ function onSubmitClick() {
   handleSubmit()
 }
 
-const submitLabel = computed(() => {
-  if (loadedPhase.value === 'REJECTED') {
-    return '重新提交'
-  }
-  if (loadedPhase.value === 'PUBLISHED') {
-    if (loadedDraftPhase.value === 'REJECTED') {
-      return '重新提交修改'
-    }
-    if (loadedDraftPhase.value === 'PENDING') {
-      return '提交更新'
-    }
-    return '提交修改'
-  }
-  if (loadedPhase.value === 'PENDING') {
-    return '提交更新'
-  }
-  return '提交'
-})
+// 统一两字文案：无论新建 / 驳回重提 / 修改稿提交都叫「提交」，
+// 状态差异由状态列与审核记录表达，动词不再背着状态
+const submitLabel = '提交'
 
 onMounted(async () => {
   try {
@@ -687,7 +672,7 @@ onMounted(async () => {
         <VButton
           :loading="saving"
           @click="requestSettingAction(false)"
-        >{{ loadedPhase === 'PUBLISHED' ? '保存修改' : '保存' }}</VButton>
+        >保存</VButton>
         <VButton @click="requestCloseSetting">关闭</VButton>
       </VSpace>
     </template>

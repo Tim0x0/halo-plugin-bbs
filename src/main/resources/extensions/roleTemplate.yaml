@@ -59,6 +59,7 @@ rules:
       - "bbsposts/unpublish"
       - "bbsposts/approve"
       - "bbsposts/reject"
+      - "bbsposts/withdraw"
       - "bbsposts/pin"
       - "bbsposts/unpin"
       - "bbsposts/lock"
@@ -116,9 +117,14 @@ rules:
   - apiGroups: ["uc.api.bbs.timxs.com"]
     resources: ["bbsposts"]
     verbs: ["create", "get", "update", "delete"]
-  # 问答帖已解决切换是子资源路径（/bbsposts/{name}/solve|unsolve），需单独授权
+  # 问答帖已解决切换是子资源路径（/bbsposts/{name}/solve|unsolve），需单独授权；
+  # 撤回提交（/bbsposts/{name}/withdraw）同理
   - apiGroups: ["uc.api.bbs.timxs.com"]
-    resources: ["bbsposts/submit", "bbsposts/solve", "bbsposts/unsolve"]
+    resources:
+      - "bbsposts/submit"
+      - "bbsposts/withdraw"
+      - "bbsposts/solve"
+      - "bbsposts/unsolve"
     verbs: ["update"]
   # 快照没有独立权限：能读这篇帖子就能读它的全部历史版本，能改就能恢复 / 删除。
   # 但 Halo RBAC 没有「父资源自动覆盖子资源」机制，规则仍须逐个子资源枚举，

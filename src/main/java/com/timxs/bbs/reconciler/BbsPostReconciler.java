@@ -4,6 +4,7 @@ import com.timxs.bbs.event.BbsPostChangedEvent;
 import com.timxs.bbs.extension.BbsCategory;
 import com.timxs.bbs.extension.BbsPost;
 import com.timxs.bbs.search.BbsPostDocumentsProvider;
+import com.timxs.bbs.service.BbsModerationNotificationService;
 import com.timxs.bbs.service.BbsModerationRecordService;
 import com.timxs.bbs.service.BbsPostContentService;
 import java.nio.ByteBuffer;
@@ -68,15 +69,18 @@ public class BbsPostReconciler implements Reconciler<Reconciler.Request> {
     private final BbsCountService countService;
     private final BbsPostContentService contentService;
     private final BbsModerationRecordService moderationRecordService;
+    private final BbsModerationNotificationService moderationNotificationService;
 
     public BbsPostReconciler(ExtensionClient client, ApplicationEventPublisher eventPublisher,
             BbsCountService countService, BbsPostContentService contentService,
-            BbsModerationRecordService moderationRecordService) {
+            BbsModerationRecordService moderationRecordService,
+            BbsModerationNotificationService moderationNotificationService) {
         this.client = client;
         this.eventPublisher = eventPublisher;
         this.countService = countService;
         this.contentService = contentService;
         this.moderationRecordService = moderationRecordService;
+        this.moderationNotificationService = moderationNotificationService;
     }
 
     @Override
@@ -156,6 +160,14 @@ public class BbsPostReconciler implements Reconciler<Reconciler.Request> {
                         request.name(), error);
                 return Result.requeue(Duration.ofSeconds(30));
             }
+        }
+
+        // 作者订阅审核结果（幂等）。失败不挡调和；触发通知时会再订一次兜底。
+        try {
+            moderationNotificationService.subscribe(post).block(Duration.ofSeconds(5));
+        } catch (RuntimeException error) {
+            log.warn("Failed to subscribe BBS moderation notifications for {}",
+                    request.name(), error);
         }
 
         if (hasPendingModerationRecord(annotations)) {

@@ -91,6 +91,7 @@ const settingModalVisible = ref(false)
 const settingPost = ref<BbsPostVo | null>(null)
 const settingForm = ref(defaultPostForm())
 const settingSaving = ref(false)
+const settingPublishing = ref(false)
 /** 审核记录弹窗的目标帖名；审核留痕从编辑器挪到列表行下拉后的唯一入口 */
 const moderationName = ref('')
 /** 评论管理弹窗的目标帖名；评论列（有未审核时上色）点击打开 */
@@ -262,6 +263,7 @@ const POST_ACTIONS = {
   publish: consoleApi.publishPost,
   unpublish: consoleApi.unpublishPost,
   approve: consoleApi.approvePost,
+  withdraw: consoleApi.withdrawPost,
   pin: consoleApi.pinPost,
   unpin: consoleApi.unpinPost,
   lock: consoleApi.lockPost,
@@ -569,29 +571,30 @@ function openSetting(post: BbsPostVo) {
   settingModalVisible.value = true
 }
 
-async function saveSetting() {
+async function persistSetting() {
   const f = settingForm.value
-  if (!f.title.trim()) {
-    Toast.warning('标题不能为空')
-    return
+  const post = settingPost.value
+  if (!post) {
+    return false
   }
-  if (!f.slug.trim()) {
-    Toast.warning('别名不能为空')
-    return
-  }
+  await consoleApi.updatePost(post.name, {
+    title: f.title.trim(),
+    slug: f.slug.trim(),
+    type: f.type,
+    categoryName: f.categoryName,
+    autoExcerpt: f.autoExcerpt,
+    excerpt: f.excerpt,
+    pinned: f.pinned,
+    pinPriority: f.pinPriority,
+  })
+  return true
+}
+
+async function saveSetting() {
   settingSaving.value = true
   try {
     // 走 PUT：正文不传，服务层保留原内容，并跑分类存在 / slug 唯一 / 改出问答清 solved
-    await consoleApi.updatePost(settingPost.value!.name, {
-      title: f.title.trim(),
-      slug: f.slug.trim(),
-      type: f.type,
-      categoryName: f.categoryName,
-      autoExcerpt: f.autoExcerpt,
-      excerpt: f.excerpt,
-      pinned: f.pinned,
-      pinPriority: f.pinPriority,
-    })
+    await persistSetting()
     Toast.success('保存成功')
     settingModalVisible.value = false
     await fetchPosts()
@@ -599,6 +602,46 @@ async function saveSetting() {
     /* 请求错误由全局拦截器提示（如别名冲突） */
   } finally {
     settingSaving.value = false
+  }
+}
+
+/**
+ * 设置弹窗主操作按帖子状态切换（与行内按钮同一口径）：
+ * 进过审核流程（待审核 / 已驳回）一律「通过」；纯草稿才是「发布」。
+ */
+const settingPrimaryAction = computed<'approve' | 'publish' | undefined>(() => {
+  const post = settingPost.value
+  if (!post || post.phase === 'PUBLISHED') {
+    return undefined
+  }
+  if (isPendingReview(post) || post.phase === 'REJECTED') {
+    return 'approve'
+  }
+  return 'publish'
+})
+
+async function primaryFromSetting() {
+  const post = settingPost.value
+  const action = settingPrimaryAction.value
+  if (!post || !action) {
+    return
+  }
+  settingPublishing.value = true
+  try {
+    await persistSetting()
+    if (action === 'approve') {
+      await consoleApi.approvePost(post.name)
+      Toast.success('已通过并发布')
+    } else {
+      await consoleApi.publishPost(post.name)
+      Toast.success('已发布')
+    }
+    settingModalVisible.value = false
+    await fetchPosts()
+  } catch {
+    /* 请求错误由全局拦截器提示（缺分类 / 别名冲突等） */
+  } finally {
+    settingPublishing.value = false
   }
 }
 
@@ -867,11 +910,20 @@ onMounted(() => {
                   通过审核
                 </VDropdownItem>
                 <VDropdownItem type="danger" @click="openReject(post)">驳回</VDropdownItem>
+                <VDropdownItem @click="doAction(post.name, 'withdraw', '已撤回，回到草稿')">
+                  取消提交
+                </VDropdownItem>
               </template>
               <template v-else-if="post.phase === 'PUBLISHED'">
-                <!-- 与未发布帖的「发布」同词：动作语义一致（把当前内容推为前台版本） -->
+                <!-- 被驳回的修改稿走「通过」（推翻驳回直接发布）；普通修改稿走「发布」 -->
                 <VDropdownItem
-                  v-if="post.hasDraft"
+                  v-if="post.draftPhase === 'REJECTED'"
+                  @click="doAction(post.name, 'approve', '已通过并发布')"
+                >
+                  通过
+                </VDropdownItem>
+                <VDropdownItem
+                  v-else-if="post.hasDraft"
                   @click="doAction(post.name, 'publish', '已发布')"
                 >
                   发布
@@ -880,12 +932,20 @@ onMounted(() => {
                   取消发布
                 </VDropdownItem>
               </template>
-              <!-- 无分类的未发布帖（未发布阶段允许暂缺分类）：发布前先进设置补分类 -->
+              <!-- 未发布：已驳回走「通过」，纯草稿走「发布」；无分类先进设置补齐 -->
               <VDropdownItem
                 v-else
-                @click="post.category ? doAction(post.name, 'publish', '已发布') : openSetting(post)"
+                @click="
+                  post.category
+                    ? doAction(
+                        post.name,
+                        post.phase === 'REJECTED' ? 'approve' : 'publish',
+                        post.phase === 'REJECTED' ? '已通过并发布' : '已发布'
+                      )
+                    : openSetting(post)
+                "
               >
-                发布
+                {{ post.phase === 'REJECTED' ? '通过' : '发布' }}
               </VDropdownItem>
               <VDropdownItem
                 v-if="post.pinned"
@@ -939,7 +999,11 @@ onMounted(() => {
     :categories="categories"
     :post-name="settingPost?.name"
     :saving="settingSaving"
+    :publishing="settingPublishing"
+    :primary-action="settingPrimaryAction"
+    :primary-label="settingPrimaryAction === 'approve' ? '通过' : '发布'"
     @confirm="saveSetting"
+    @primary="primaryFromSetting"
     @close="settingModalVisible = false"
   />
 

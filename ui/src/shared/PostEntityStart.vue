@@ -86,16 +86,11 @@ const marks = computed(() => {
 })
 
 /**
- * 已编辑：只算首次发布之后的编辑——首次审核通过前改多少遍都是打磨未发布内容，
- * 不叫「已编辑」（对齐 Discourse/Flarum 的 edited 语义：发布后的修改才标记）。
- * publishTime 是首次发布时间（取消发布后再次发布沿用，后端已保证）。
+ * 已编辑：直接用服务端派生的 edited（发布后正文有改动），与前台 /bbs 同一口径。
+ * 语义对齐 Discourse/Flarum：首次发布前的打磨不算，未发布的工作稿改动不算
+ * （后者由状态点表达）；只改设置也不算（设置变更不刷新正文编辑时间）。
  */
-const isEdited = computed(() => {
-  const { lastEditTime, publishTime } = props.post
-  return (
-    !!lastEditTime && !!publishTime && new Date(lastEditTime) > new Date(publishTime)
-  )
-})
+const isEdited = computed(() => Boolean(props.post.edited))
 </script>
 
 <template>

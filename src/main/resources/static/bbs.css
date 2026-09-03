@@ -129,6 +129,211 @@ button {
   flex: 1;
 }
 
+/* 顶栏站点菜单（Halo 菜单组，支持多级） */
+/* 不能加 overflow：下拉面板在容器内，任何方向的 overflow 都会把它裁掉，
+   桌面二级菜单就「永远打不开」。项太多放不下时宁可横向溢出（窄屏有汉堡兜底） */
+.bbs-hm {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+/* 父项（有子项）：胶囊底色挂在容器上，文字与箭头同底一体（观感对齐窄屏的行）。
+   hover / 打开只换底色；展开仍只靠点击——带链接父项点箭头，无链接父项整项即开关 */
+.bbs-hm__item {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  border-radius: 6px;
+  transition: var(--b-tr);
+}
+
+.bbs-hm__item:hover,
+.bbs-hm__item.open {
+  background: var(--b-hover);
+}
+
+.bbs-hm__item:hover > .bbs-hm__link,
+.bbs-hm__item.open > .bbs-hm__link {
+  color: var(--b-text);
+}
+
+/* 桌面：带链接父项的展开箭头——文字跳转、箭头开合 */
+.bbs-hm__caret {
+  display: inline-flex;
+  align-items: center;
+  margin-left: -8px;
+  padding: 6px 8px 6px 2px;
+  cursor: pointer;
+  color: var(--b-text-3);
+}
+
+.bbs-hm__caret:hover {
+  color: var(--b-text);
+}
+
+.bbs-hm__caret svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.15s ease;
+}
+
+.bbs-hm__item.open > .bbs-hm__caret svg {
+  transform: rotate(180deg);
+}
+
+.bbs-hm__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--b-text-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: var(--b-tr);
+}
+
+/* 无子项的顶层项：胶囊挂自身；父项内的链接/按钮不背包袱，底色与圆角由容器统一给 */
+.bbs-hm > .bbs-hm__link:hover {
+  color: var(--b-text);
+  background: var(--b-hover);
+}
+
+.bbs-hm__item > .bbs-hm__link {
+  border-radius: 0;
+}
+
+.bbs-hm__link--plain {
+  cursor: default;
+  font-weight: 500;
+}
+
+.bbs-hm__link svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.bbs-hm__panel {
+  left: 0;
+  right: auto;
+}
+
+/* 面板内拍平的多级项：缩进由模板按 depth 内联，层级靠留白表达 */
+.bbs-hm__panel a {
+  white-space: nowrap;
+}
+
+.bbs-hm__plain {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--b-text-3);
+  font-size: 13.5px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* 窄屏汉堡：默认隐藏，≤800px 显示 */
+.bbs-hm-m {
+  display: none;
+  flex: none;
+}
+
+.bbs-hm-m__btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  color: var(--b-text-2);
+}
+
+.bbs-hm-m__btn:hover,
+.bbs-hm-m.open .bbs-hm-m__btn {
+  color: var(--b-text);
+  background: var(--b-hover);
+}
+
+.bbs-hm-m__btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.bbs-hm-m__panel {
+  left: 0;
+  right: auto;
+  min-width: min(230px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.bbs-hm-m__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--b-text-2);
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.bbs-hm-m__row:hover {
+  background: var(--b-hover);
+  color: var(--b-text);
+}
+
+.bbs-hm-m__row--plain {
+  cursor: default;
+  color: var(--b-text-3);
+}
+
+/* 手风琴：子行默认收起，祖先全部展开时才可见（is-shown 由 bbs.js 维护） */
+.bbs-hm-m__row[data-bbs-depth] {
+  display: none;
+}
+
+.bbs-hm-m__row[data-bbs-depth].is-shown {
+  display: flex;
+}
+
+/* 窄屏：父行箭头——箭头开合；带链接的行文字仍可点跳转（bbs.js 挂载） */
+.bbs-hm-m__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-right: -8px;
+  cursor: pointer;
+  color: var(--b-text-3);
+}
+
+.bbs-hm-m__caret svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  transition: transform 0.15s ease;
+}
+
+.bbs-hm-m__caret.is-open svg {
+  transform: rotate(180deg);
+}
+
+.bbs-hm-m__row--plain.bbs-hm-m__row--parent {
+  cursor: pointer;
+}
+
 /* 搜索：灰底胶囊，聚焦展开描边 */
 .bbs-hs {
   position: relative;
@@ -707,10 +912,11 @@ a.bbs-by__name:hover {
   flex: none;
 }
 
-/* 列表「已编辑」标记（元信息行末尾，纯文字） */
+/* 列表「已编辑」标记（元信息行末尾，纯文字）：字号与相邻时间一致——
+   两字号并存时字形度量差会在视觉上错出水平线 */
 .bbs-meta-edited {
   flex: none;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--b-text-3);
 }
 
@@ -1577,6 +1783,14 @@ a.bbs-post__name:hover {
 
   .bbs-hs:focus-within {
     flex: 1 1 auto;
+  }
+
+  .bbs-hm {
+    display: none;
+  }
+
+  .bbs-hm-m {
+    display: block;
   }
 
   .bbs-hero {

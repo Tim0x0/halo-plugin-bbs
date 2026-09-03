@@ -37,6 +37,81 @@
       </span>
       <span th:text="${bbsTitle}">BBS 社区</span>
     </a>
+    <!-- 顶栏站点菜单：与列表页同一份内联标记（服务层已把菜单树拍平） -->
+    <nav class="bbs-hm" th:if="${!#lists.isEmpty(headerMenu)}" aria-label="站点导航">
+      <th:block th:each="item : ${headerMenu}">
+        <div class="bbs-hm__item bbs-drop" th:if="${item.hasChildren()}">
+          <!-- 带链接：文字跳转（同官方主题），箭头只管展开，悬停也能展开；
+               不带链接：整项就是开关 -->
+          <a class="bbs-hm__link" th:if="${!#strings.isEmpty(item.href)}"
+             th:href="${item.href}" th:target="${item.target}"
+             th:rel="${item.target == '_blank'} ? 'noopener noreferrer' : null">
+            <span th:text="${item.displayName}">项</span>
+          </a>
+          <span class="bbs-hm__caret" th:if="${!#strings.isEmpty(item.href)}"
+                data-drop-toggle role="button" aria-label="展开子菜单">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+          <button class="bbs-hm__link" type="button" th:if="${#strings.isEmpty(item.href)}"
+                  data-drop-toggle>
+            <span th:text="${item.displayName}">项</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="bbs-drop__panel bbs-hm__panel">
+            <th:block th:each="child : ${item.children}">
+              <a th:if="${!#strings.isEmpty(child.href)}"
+                 th:href="${child.href}" th:target="${child.target}"
+                 th:rel="${child.target == '_blank'} ? 'noopener noreferrer' : null"
+                 th:style="|padding-left: ${12 + child.depth * 14}px|"
+                 th:text="${child.displayName}">项</a>
+              <span class="bbs-hm__plain" th:if="${#strings.isEmpty(child.href)}"
+                    th:style="|padding-left: ${12 + child.depth * 14}px|"
+                    th:text="${child.displayName}">项</span>
+            </th:block>
+          </div>
+        </div>
+        <a class="bbs-hm__link"
+           th:if="${!item.hasChildren() and !#strings.isEmpty(item.href)}"
+           th:href="${item.href}" th:target="${item.target}"
+           th:rel="${item.target == '_blank'} ? 'noopener noreferrer' : null"
+           th:text="${item.displayName}">项</a>
+        <span class="bbs-hm__link bbs-hm__link--plain"
+              th:if="${!item.hasChildren() and #strings.isEmpty(item.href)}"
+              th:text="${item.displayName}">项</span>
+      </th:block>
+    </nav>
+    <div class="bbs-hm-m bbs-drop" th:if="${!#lists.isEmpty(headerMenu)}">
+      <button class="bbs-hm-m__btn" type="button" data-drop-toggle aria-label="站点导航">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="bbs-drop__panel bbs-hm-m__panel" aria-label="站点导航">
+        <th:block th:each="item : ${headerMenu}">
+          <a class="bbs-hm-m__row" th:if="${!#strings.isEmpty(item.href)}"
+             th:href="${item.href}" th:target="${item.target}"
+             th:rel="${item.target == '_blank'} ? 'noopener noreferrer' : null"
+             th:text="${item.displayName}">项</a>
+          <span class="bbs-hm-m__row bbs-hm-m__row--plain"
+                th:if="${#strings.isEmpty(item.href)}"
+                th:text="${item.displayName}">项</span>
+          <th:block th:each="child : ${item.children}">
+            <a class="bbs-hm-m__row" th:if="${!#strings.isEmpty(child.href)}"
+               th:href="${child.href}" th:target="${child.target}"
+               th:rel="${child.target == '_blank'} ? 'noopener noreferrer' : null"
+               th:style="|padding-left: ${12 + child.depth * 14}px|"
+               th:attr="data-bbs-depth=${child.depth}"
+               th:text="${child.displayName}">项</a>
+            <span class="bbs-hm-m__row bbs-hm-m__row--plain"
+                  th:if="${#strings.isEmpty(child.href)}"
+                  th:style="|padding-left: ${12 + child.depth * 14}px|"
+                  th:attr="data-bbs-depth=${child.depth}"
+                  th:text="${child.displayName}">项</span>
+          </th:block>
+        </th:block>
+      </div>
+    </div>
     <span class="bbs-hd__spacer"></span>
     <form class="bbs-hs" method="get" th:action="@{/bbs}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -182,7 +257,8 @@
                     th:title="${bbsTime.absTitle(post.publishTime)}"
                     th:text="${bbsTime.display(post.publishTime, dateFormat)}">时间</time>
             </th:block>
-            <span class="bbs-edited" th:if="${post.lastEditTime != null}"
+            <!-- 已编辑口径与列表 / Console 一致：服务端派生 edited（发布后正文有改动） -->
+            <span class="bbs-edited" th:if="${post.edited}"
                   th:title="|编辑于 ${bbsTime.absTitle(post.lastEditTime)}|">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round">

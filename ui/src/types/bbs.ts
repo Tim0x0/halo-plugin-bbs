@@ -295,6 +295,8 @@ export interface BbsPostVo {
   locked?: boolean
   /** 问答帖是否已解决 */
   solved?: boolean
+  /** 是否「已编辑」：发布后正文有改动（服务端派生，前台同口径；未发布的工作稿改动不算） */
+  edited?: boolean
   /** 当前未发布稿或已发布修改稿的驳回原因 */
   rejectReason?: string
   /** 公开可见的评论数（Halo 评论体系） */

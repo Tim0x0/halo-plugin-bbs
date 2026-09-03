@@ -1,0 +1,106 @@
+# BBS 审核结果通知：ReasonType + 模板。分发、已读、退订由 Halo 通知中心承担。
+# ui-permissions 对齐官方 new-comment-on-post：出现在「有发帖权用户」的通知偏好里。
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
+  name: bbs-post-approved
+  annotations:
+    rbac.authorization.halo.run/ui-permissions: |
+      [ "plugin:bbs:uc" ]
+spec:
+  displayName: "我的帖子通过审核"
+  description: "当你提交的帖子或修改稿通过审核并发布时，你会收到一条通知。"
+  properties:
+    - name: owner
+      type: string
+      description: "帖子作者用户名，订阅表达式按此匹配。"
+    - name: postName
+      type: string
+    - name: postTitle
+      type: string
+    - name: postUrl
+      type: string
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
+  name: bbs-post-rejected
+  annotations:
+    rbac.authorization.halo.run/ui-permissions: |
+      [ "plugin:bbs:uc" ]
+spec:
+  displayName: "我的帖子未通过审核"
+  description: "当你提交的帖子或修改稿被驳回时，你会收到一条通知，包含驳回原因。"
+  properties:
+    - name: owner
+      type: string
+      description: "帖子作者用户名，订阅表达式按此匹配。"
+    - name: postName
+      type: string
+    - name: postTitle
+      type: string
+    - name: postUrl
+      type: string
+    - name: rejectReason
+      type: string
+      optional: true
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
+  name: template-bbs-post-approved
+spec:
+  reasonSelector:
+    reasonType: bbs-post-approved
+    language: default
+  template:
+    title: "你的帖子《[(${postTitle})]》已通过审核"
+    rawBody: |
+      [(${subscriber.displayName})] 你好：
+
+        你的帖子《[(${postTitle})]》已通过审核并发布。
+        查看：[(${postUrl})]
+    htmlBody: |
+      <div class="notification-content">
+        <div class="head">
+          <p class="honorific" th:text="|${subscriber.displayName} 你好：|"></p>
+        </div>
+        <div class="body">
+          <p>
+            你的帖子
+            <a th:href="${postUrl}" target="_blank" th:text="|《${postTitle}》|"></a>
+            已通过审核并发布。
+          </p>
+        </div>
+      </div>
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
+  name: template-bbs-post-rejected
+spec:
+  reasonSelector:
+    reasonType: bbs-post-rejected
+    language: default
+  template:
+    title: "你的帖子《[(${postTitle})]》未通过审核"
+    rawBody: |
+      [(${subscriber.displayName})] 你好：
+
+        你的帖子《[(${postTitle})]》未通过审核。
+        原因：[(${rejectReason})]
+        前往修改：[(${postUrl})]
+    htmlBody: |
+      <div class="notification-content">
+        <div class="head">
+          <p class="honorific" th:text="|${subscriber.displayName} 你好：|"></p>
+        </div>
+        <div class="body">
+          <p>
+            你的帖子
+            <a th:href="${postUrl}" target="_blank" th:text="|《${postTitle}》|"></a>
+            未通过审核。
+          </p>
+          <p>原因：<span th:text="${rejectReason}"></span></p>
+        </div>
+      </div>

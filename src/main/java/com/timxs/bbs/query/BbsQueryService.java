@@ -1161,7 +1161,12 @@ public class BbsQueryService {
                 .publishTime(spec.getPublishTime())
                 .lastActivityTime(spec.getLastActivityTime() != null
                         ? spec.getLastActivityTime() : spec.getPublishTime())
-                .lastEditTime(draft == null ? spec.getLastEditTime() : draft.getLastEditTime())
+                // 已编辑统一口径：只算发布实体（spec）上的正文编辑时间，
+                // 未发布工作稿的时间不对外——前台据此展示，不能泄漏未发布改动
+                .lastEditTime(spec.getLastEditTime())
+                .edited(spec.getPublishTime() != null
+                        && spec.getLastEditTime() != null
+                        && spec.getLastEditTime().isAfter(spec.getPublishTime()))
                 .creationTimestamp(post.getMetadata().getCreationTimestamp())
                 .build();
     }

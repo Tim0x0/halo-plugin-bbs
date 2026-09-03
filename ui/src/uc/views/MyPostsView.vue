@@ -30,6 +30,7 @@ import {
   postFormFrom,
   type BbsPostVo,
   type CategoryVo,
+  type PostFormState,
 } from '@/types/bbs'
 import PostSettingModal from '@/console/components/PostSettingModal.vue'
 import CategoryFilterDropdown from '@/console/components/CategoryFilterDropdown.vue'
@@ -161,6 +162,7 @@ const settingVisible = ref(false)
 const settingPost = ref<BbsPostVo | null>(null)
 const settingForm = ref(defaultPostForm())
 const settingSaving = ref(false)
+const settingPublishing = ref(false)
 /** 审核记录弹窗的目标帖名；审核留痕从编辑器挪到列表行下拉后的唯一入口 */
 const moderationName = ref('')
 
@@ -180,20 +182,26 @@ async function openSetting(post: BbsPostVo) {
   }
 }
 
+function settingBodyFrom(f: PostFormState) {
+  return {
+    title: f.title,
+    slug: f.slug,
+    type: f.type,
+    categoryName: f.categoryName,
+    excerpt: f.excerpt,
+    autoExcerpt: f.autoExcerpt,
+  }
+}
+
+function settingBody() {
+  return settingBodyFrom(settingForm.value)
+}
+
 async function saveSetting() {
-  const f = settingForm.value
   const post = settingPost.value!
   settingSaving.value = true
   try {
-    const body = {
-      title: f.title,
-      slug: f.slug,
-      type: f.type,
-      categoryName: f.categoryName,
-      excerpt: f.excerpt,
-      autoExcerpt: f.autoExcerpt,
-    }
-    await ucApi.saveDraft(post.name, body)
+    await ucApi.saveDraft(post.name, settingBody())
     Toast.success('保存成功')
     settingVisible.value = false
     await fetchPosts()
@@ -201,6 +209,71 @@ async function saveSetting() {
     /* 请求错误由全局拦截器提示 */
   } finally {
     settingSaving.value = false
+  }
+}
+
+/**
+ * UC 主操作：未发布 / 已驳回显示「提交」（状态差异由状态列表达）；
+ * 已发布帖有未提交修改时提交修改稿；待审核中不显示（已在队列）。
+ */
+const settingPrimaryAction = computed<'submit' | undefined>(() => {
+  const post = settingPost.value
+  if (!post || post.phase === 'PENDING') {
+    return undefined
+  }
+  if (post.phase === 'PUBLISHED') {
+    return post.hasDraft && post.draftPhase !== 'PENDING' ? 'submit' : undefined
+  }
+  return 'submit'
+})
+
+const settingPrimaryLabel = computed(() =>
+  settingPost.value?.phase === 'PUBLISHED' ? '提交修改' : '提交'
+)
+
+async function submitFromSetting() {
+  const post = settingPost.value!
+  settingPublishing.value = true
+  try {
+    await ucApi.submit(post.name, settingBody())
+    Toast.success('已提交')
+    settingVisible.value = false
+    await fetchPosts()
+  } catch {
+    /* 请求错误由全局拦截器提示 */
+  } finally {
+    settingPublishing.value = false
+  }
+}
+
+/**
+ * 列表直接提交（草稿 / 已驳回）：缺分类先去设置弹窗补齐（弹窗里有「提交」）；
+ * 否则按帖子现有元数据原样提交——正文不传，服务端保留快照链内容。
+ */
+async function submitPost(post: BbsPostVo) {
+  if (!post.category) {
+    await openSetting(post)
+    return
+  }
+  try {
+    const { data } = await ucApi.getMine(post.name)
+    const f = postFormFrom(data, { managed: false })
+    await ucApi.submit(post.name, settingBodyFrom(f))
+    Toast.success('已提交')
+    await fetchPosts()
+  } catch {
+    /* 请求错误由全局拦截器提示 */
+  }
+}
+
+/** 撤回待审核提交：新帖退回草稿；修改稿退回草稿态，前台发布版不受影响 */
+async function withdrawPost(post: BbsPostVo) {
+  try {
+    await ucApi.withdraw(post.name)
+    Toast.success('已撤回，帖子回到草稿状态')
+    await fetchPosts()
+  } catch {
+    /* 请求错误由全局拦截器提示 */
   }
 }
 
@@ -337,6 +410,29 @@ onMounted(() => {
               <VDropdownItem :disabled="post.locked" @click="openSetting(post)">
                 设置
               </VDropdownItem>
+              <!-- 未发布 / 已驳回可直接提交；已发布帖有未提交修改时提交修改稿；
+                   待审核中不显示（已在队列，用「取消提交」）——修改稿待审核同理排除 -->
+              <VDropdownItem
+                v-if="
+                  (post.phase === 'DRAFT'
+                    || post.phase === 'REJECTED'
+                    || (post.phase === 'PUBLISHED'
+                      && post.hasDraft
+                      && post.draftPhase !== 'PENDING'))
+                    && !post.locked
+                "
+                @click="submitPost(post)"
+              >
+                {{ post.phase === 'PUBLISHED' ? '提交修改' : '提交' }}
+              </VDropdownItem>
+              <!-- 待审核可撤回：新帖退回草稿；修改稿退回草稿态，前台发布版不受影响。
+                   锁定帖作者不可操作（后端归属校验同样会拒） -->
+              <VDropdownItem
+                v-if="(post.phase === 'PENDING' || post.draftPhase === 'PENDING') && !post.locked"
+                @click="withdrawPost(post)"
+              >
+                取消提交
+              </VDropdownItem>
               <VDropdownItem @click="moderationName = post.name">审核记录</VDropdownItem>
               <VDropdownItem
                 v-if="post.type === 'QUESTION' && !post.locked"
@@ -371,7 +467,11 @@ onMounted(() => {
     :managed="false"
     :post-name="settingPost?.name"
     :saving="settingSaving"
+    :publishing="settingPublishing"
+    :primary-action="settingPrimaryAction"
+    :primary-label="settingPrimaryLabel"
     @confirm="saveSetting"
+    @primary="submitFromSetting"
     @close="settingVisible = false"
   />
 

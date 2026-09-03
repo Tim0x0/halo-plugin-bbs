@@ -58,7 +58,8 @@ public class BbsSettings {
                         string(value(brand, "logo")),
                         string(value(brand, "slogan")),
                         string(value(brand, "accentColor")),
-                        string(value(brand, "titleSeparator"))),
+                        string(value(brand, "titleSeparator")),
+                        string(value(brand, "headerMenu"))),
                 new Hero(
                         bool(value(hero, "showHero")),
                         string(value(hero, "heroStyle")),
@@ -132,13 +133,13 @@ public class BbsSettings {
 
     public record Appearance(Brand brand, Hero hero, Seo seo) {
         static Appearance empty() {
-            return new Appearance(new Brand(null, null, null, null, null),
+            return new Appearance(new Brand(null, null, null, null, null, null),
                     new Hero(null, null, null), new Seo(null));
         }
     }
 
     public record Brand(String pageTitle, String logo, String slogan, String accentColor,
-            String titleSeparator) {
+            String titleSeparator, String headerMenu) {
     }
 
     public record Hero(Boolean showHero, String heroStyle, String bannerImage) {

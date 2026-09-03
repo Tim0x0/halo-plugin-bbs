@@ -26,6 +26,16 @@ spec:
               accepts:
                 - "image/*"
               value: ""
+            - $formkit: select
+              name: headerMenu
+              label: 顶栏菜单
+              help: 选择 Halo「外观 → 菜单」里已有的菜单组，支持多级；留空则顶栏不显示导航
+              action: "/api/v1alpha1/menus"
+              autoSelect: false
+              clearable: true
+              requestOption:
+                labelField: "spec.displayName"
+                valueField: "metadata.name"
             - $formkit: text
               name: slogan
               label: 社区副标题

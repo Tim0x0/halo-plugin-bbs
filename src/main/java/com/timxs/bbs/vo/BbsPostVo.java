@@ -72,6 +72,15 @@ public class BbsPostVo {
     /** 问答帖是否已解决（仅 QUESTION 有意义） */
     private Boolean solved;
 
+    /**
+     * 是否「已编辑」：已发布版本的正文在发布后被改动过。
+     *
+     * <p>口径统一由服务端派生，前台 / Console / UC / 主题共用：未发布的工作稿
+     * 改动不算（未发布修改由 {@code hasDraft} / 状态点表达）；只改设置也不算
+     * （设置变更不刷新正文编辑时间）。</p>
+     */
+    private Boolean edited;
+
     /** 驳回原因（帖子或已发布修改稿为 REJECTED 时有值，Console / UC 展示用） */
     private String rejectReason;
 

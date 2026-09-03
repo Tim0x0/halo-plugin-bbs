@@ -51,19 +51,95 @@
     paintLetterEl(el);
   });
 
-  /* 下拉菜单（用户菜单 / 排序 / 移动端分类）：
-     data-drop-toggle 触发开合，点击面板外或面板内链接后关闭 */
+  /* 窄屏顶栏菜单手风琴：多级子行按 data-bbs-depth 拍平渲染且默认收起。
+     有子行的行挂箭头按钮：箭头展开 / 收起子树（子孙行可见性=所有祖先均已展开），
+     行自身保留原语义——带链接的点文字跳转，不带链接的整行即开关。
+     （对齐官方主题「父项链接可点」；官方移动端全展开，这里手风琴更适合长菜单） */
+  (function () {
+    var rows = Array.prototype.slice.call(
+      document.querySelectorAll('.bbs-hm-m__panel .bbs-hm-m__row'));
+    if (!rows.length) return;
+    var depthOf = function (row) {
+      return parseInt(row.getAttribute('data-bbs-depth') || '0', 10);
+    };
+    var refresh = function () {
+      var stack = [];
+      rows.forEach(function (row) {
+        var d = depthOf(row);
+        while (stack.length && stack[stack.length - 1].depth >= d) stack.pop();
+        var visible = stack.every(function (s) { return s.open; });
+        if (row.hasAttribute('data-bbs-depth')) {
+          row.classList.toggle('is-shown', visible);
+        }
+        if (row.classList.contains('bbs-hm-m__row--parent')) {
+          stack.push({ depth: d, open: row.classList.contains('is-open') });
+        }
+      });
+    };
+    rows.forEach(function (row, i) {
+      var next = rows[i + 1];
+      if (!next || depthOf(next) <= depthOf(row)) return;
+      row.classList.add('bbs-hm-m__row--parent');
+      var caret = document.createElement('span');
+      caret.className = 'bbs-hm-m__caret';
+      caret.setAttribute('role', 'button');
+      caret.setAttribute('aria-label', '展开/收起子菜单');
+      caret.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        + 'stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>';
+      var toggle = function () {
+        row.classList.toggle('is-open');
+        caret.classList.toggle('is-open');
+        refresh();
+      };
+      caret.addEventListener('click', function (e) {
+        // 箭头可能嵌在链接行内：拦截默认跳转，只开合
+        e.preventDefault();
+        e.stopPropagation();
+        toggle();
+      });
+      row.appendChild(caret);
+      if (row.tagName !== 'A') {
+        // 无链接父行：整行即开关（箭头点击已 stopPropagation，不会双触发）
+        row.addEventListener('click', function () {
+          toggle();
+        });
+      }
+    });
+    refresh();
+  })();
+
+  /* 下拉菜单（用户菜单 / 排序 / 移动端分类 / 顶栏多级菜单）：
+     data-drop-toggle 触发开合。顶栏子菜单只关同级，保留祖先；其它下拉互斥。 */
   document.addEventListener('click', function (e) {
-    var opened = document.querySelectorAll('.bbs-drop.open');
     var toggle = e.target.closest('[data-drop-toggle]');
     if (toggle) {
       var drop = toggle.closest('.bbs-drop');
-      var willOpen = drop && !drop.classList.contains('open');
-      opened.forEach(function (d) { d.classList.remove('open'); });
+      if (!drop) return;
+      var willOpen = !drop.classList.contains('open');
+      var inHeader = drop.closest('.bbs-hm, .bbs-hm-m');
+      if (inHeader) {
+        var parent = drop.parentElement;
+        if (parent) {
+          parent.querySelectorAll(':scope > .bbs-drop.open').forEach(function (d) {
+            if (d !== drop) d.classList.remove('open');
+          });
+        }
+        drop.querySelectorAll('.bbs-drop.open').forEach(function (d) {
+          d.classList.remove('open');
+        });
+      } else {
+        document.querySelectorAll('.bbs-drop.open').forEach(function (d) {
+          d.classList.remove('open');
+        });
+      }
       if (willOpen) drop.classList.add('open');
+      else drop.classList.remove('open');
+      e.stopPropagation();
       return;
     }
-    opened.forEach(function (d) { d.classList.remove('open'); });
+    document.querySelectorAll('.bbs-drop.open').forEach(function (d) {
+      d.classList.remove('open');
+    });
   });
 
   /* 时间显示统一由服务端渲染（BbsTimeFormats + 后台 dateFormat 设置），

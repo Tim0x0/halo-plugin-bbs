@@ -151,6 +151,10 @@ public class BbsUcEndpoint implements CustomEndpoint {
                         .requestBody(requestBodyBuilder().content(contentBuilder()
                                 .schema(schemaBuilder().implementation(PostRequest.class))))
                         .response(responseBuilder().implementation(BbsPost.class)))
+                .PUT("/bbsposts/{name}/withdraw", this::withdrawMine, builder -> builder
+                        .operationId("WithdrawMyBbsPost").tag(TAG)
+                        .description("撤回我的待审核提交（退回草稿；修改稿退回草稿态，前台发布版不受影响）")
+                        .parameter(nameParam()))
                 .PUT("/bbsposts/{name}/solve", this::solveMine, builder -> builder
                         .operationId("SolveMyBbsPost").tag(TAG)
                         .description("标记我的问答帖为已解决（越权 403，仅问答帖）")
@@ -282,6 +286,13 @@ public class BbsUcEndpoint implements CustomEndpoint {
         return Mono.zip(request.bodyToMono(PostRequest.class), currentUsername())
                 .flatMap(tuple -> postService.submitOwned(
                         request.pathVariable("name"), tuple.getT1(), tuple.getT2()))
+                .flatMap(post -> ServerResponse.ok().bodyValue(post));
+    }
+
+    private Mono<ServerResponse> withdrawMine(ServerRequest request) {
+        return currentUsername()
+                .flatMap(username -> postService.withdrawOwned(
+                        request.pathVariable("name"), username))
                 .flatMap(post -> ServerResponse.ok().bodyValue(post));
     }
 

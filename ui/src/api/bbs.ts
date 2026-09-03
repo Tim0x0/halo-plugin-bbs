@@ -164,6 +164,9 @@ export const consoleApi = {
   rejectPost(name: string, reason?: string) {
     return axiosInstance.put(`${CONSOLE_BASE}/bbsposts/${name}/reject`, { reason: reason || '' })
   },
+  withdrawPost(name: string) {
+    return axiosInstance.put<BbsPost>(`${CONSOLE_BASE}/bbsposts/${name}/withdraw`)
+  },
   pinPost(name: string) {
     return axiosInstance.put(`${CONSOLE_BASE}/bbsposts/${name}/pin`)
   },
@@ -253,6 +256,10 @@ export const ucApi = {
   /** 显式提交：按审核策略进入 PENDING 或 PUBLISHED。 */
   submit(name: string, body: PostRequest) {
     return axiosInstance.put<BbsPost>(`${UC_BASE}/bbsposts/${name}/submit`, body)
+  },
+  /** 撤回待审核提交：新帖退回草稿；修改稿退回草稿态，前台发布版不受影响。 */
+  withdraw(name: string) {
+    return axiosInstance.put<BbsPost>(`${UC_BASE}/bbsposts/${name}/withdraw`)
   },
   solve(name: string) {
     return axiosInstance.put(`${UC_BASE}/bbsposts/${name}/solve`)

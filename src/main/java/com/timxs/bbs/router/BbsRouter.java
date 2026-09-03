@@ -4,6 +4,7 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
 import com.timxs.bbs.finder.BbsFinder;
+import com.timxs.bbs.service.BbsHeaderMenuService;
 import com.timxs.bbs.service.BbsRoles;
 import com.timxs.bbs.service.BbsSettings;
 import com.timxs.bbs.util.BbsPageRequests;
@@ -87,11 +88,13 @@ public class BbsRouter {
     private final BbsTimeFormats bbsTimeFormats;
     private final RoleService roleService;
     private final ExternalUrlSupplier externalUrlSupplier;
+    private final BbsHeaderMenuService headerMenuService;
 
     public BbsRouter(BbsFinder bbsFinder, TemplateNameResolver templateNameResolver,
             BbsSettings settings, SystemInfoGetter systemInfoGetter,
             ReactiveExtensionClient client, BbsTimeFormats bbsTimeFormats,
-            RoleService roleService, ExternalUrlSupplier externalUrlSupplier) {
+            RoleService roleService, ExternalUrlSupplier externalUrlSupplier,
+            BbsHeaderMenuService headerMenuService) {
         this.bbsFinder = bbsFinder;
         this.templateNameResolver = templateNameResolver;
         this.settings = settings;
@@ -100,6 +103,7 @@ public class BbsRouter {
         this.bbsTimeFormats = bbsTimeFormats;
         this.roleService = roleService;
         this.externalUrlSupplier = externalUrlSupplier;
+        this.headerMenuService = headerMenuService;
     }
 
     @Bean
@@ -394,6 +398,8 @@ public class BbsRouter {
         // 经 model 注入，模板用 ${bbsTime.display(...)}，勿用 @bbsTime（主题上下文无插件 bean）
         model.put("bbsTime", bbsTimeFormats);
         model.put("enableToc", cfg.enableToc());
+        model.put("headerMenu", headerMenuService.load(cfg.headerMenu())
+                .defaultIfEmpty(List.of()));
     }
 
     /** 站点名称（Halo 系统设置的 title）——页脚版权主体。 */
@@ -557,7 +563,8 @@ public class BbsRouter {
                     // 清空 = 回到默认「-」；限长防止把整段文案塞进分隔符
                     StringUtils.left(
                             StringUtils.defaultIfBlank(brand.titleSeparator(), "-").strip(),
-                            8)));
+                            8),
+                    StringUtils.trimToNull(brand.headerMenu())));
         });
     }
 
@@ -631,7 +638,7 @@ public class BbsRouter {
             boolean listShowExcerpt, String dateFormat,
             int relatedPostCount, String relatedPostStrategy, boolean enableToc,
             boolean interactionPlus, boolean listDecoration, String authorLinkTemplate,
-            String titleSeparator) {
+            String titleSeparator, String headerMenu) {
 
         /**
          * 浏览器标题：按顺序拼接非空段，空段跳过，只剩一段时不出现分隔符。
