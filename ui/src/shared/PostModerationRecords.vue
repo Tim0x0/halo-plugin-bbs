@@ -120,7 +120,15 @@ onMounted(load)
             <!-- 只呈现该动作落定后的最终状态，不展示来源态（— → 待审核这类过渡对
                  阅读留痕没有增益）；驳回原因等上下文由下方 blockquote 承载 -->
             <p v-if="record.spec.toPhase">状态：{{ phaseLabel(record.spec.toPhase) }}</p>
-            <blockquote v-if="record.spec.reason">{{ record.spec.reason }}</blockquote>
+            <!-- 驳回原因走 danger 语义；提交附言是中性说明，不能也染红 -->
+            <blockquote
+              v-if="record.spec.reason"
+              :class="
+                record.spec.action === 'REJECTED' ? 'reason--rejected' : 'reason--note'
+              "
+            >
+              {{ record.spec.reason }}
+            </blockquote>
           </div>
         </article>
       </template>
@@ -207,9 +215,19 @@ onMounted(load)
 
 .timeline-card blockquote {
   margin: 0.55rem 0 0;
-  border-left: 3px solid var(--bbs-danger);
+  border-left: 3px solid;
   padding: 0.45rem 0.65rem;
+}
+
+.timeline-card .reason--rejected {
+  border-color: var(--bbs-danger);
   background: var(--bbs-danger-bg);
   color: var(--bbs-danger);
+}
+
+.timeline-card .reason--note {
+  border-color: var(--bbs-border);
+  background: var(--bbs-bg-soft);
+  color: var(--bbs-text-muted);
 }
 </style>
