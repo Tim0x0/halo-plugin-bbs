@@ -28,6 +28,7 @@ import PostEditorFrame from '@/shared/PostEditorFrame.vue'
 import PostSettingForm from '@/shared/PostSettingForm.vue'
 import PostDetailPanel from '@/shared/PostDetailPanel.vue'
 import PostPreviewModal from '@/shared/PostPreviewModal.vue'
+import SubmitNoteModal from '@/shared/SubmitNoteModal.vue'
 import { publicApi, ucApi } from '@/api/bbs'
 import { BBS_TYPE_LABELS, bbsStatusText } from '@/utils/post-labels'
 import { contentStats } from '@/utils/content-stats'
@@ -374,7 +375,7 @@ async function handleSave(options?: { mute?: boolean }) {
  * 显式提交：新建内容先创建 DRAFT，再调用 submit；已有草稿/驳回稿/待审稿直接提交，
  * 已发布帖也只在这条明确的用户操作中提交修改。成功且没有后续输入时返回列表。
  */
-async function handleSubmit() {
+async function handleSubmit(submitNote?: string) {
   if (!editorReady.value || saving.value) {
     return
   }
@@ -442,7 +443,11 @@ async function handleSubmit() {
         syncSnapshotState(afterContent)
       }
 
-      const { data } = await ucApi.submit(postName, { ...body, content: undefined })
+      const { data } = await ucApi.submit(postName, {
+        ...body,
+        content: undefined,
+        submitNote: submitNote || undefined,
+      })
       syncSnapshotState(data)
       loadedPhase.value = data.spec?.phase || loadedPhase.value
       loadedDraftPhase.value = data.spec?.draft?.phase
@@ -559,9 +564,29 @@ function requestSettingAction(submit: boolean) {
   settingForm.value?.submit()
 }
 
+// —— 提交附言弹窗：与驳回弹窗同范式，附言可选；确认后跑真正的提交 ——
+const noteVisible = ref(false)
+const noteSaving = ref(false)
+let noteContinuation: ((note: string) => Promise<void>) | null = null
+
+function askSubmitNote(continuation: (note: string) => Promise<void>) {
+  noteContinuation = continuation
+  noteVisible.value = true
+}
+
+async function confirmSubmitNote(note: string) {
+  noteSaving.value = true
+  try {
+    await noteContinuation?.(note)
+    noteVisible.value = false
+  } finally {
+    noteSaving.value = false
+  }
+}
+
 function onSettingSubmit() {
   if (pendingSubmit.value) {
-    handleSubmit()
+    askSubmitNote((note) => handleSubmit(note))
   } else {
     handleSave()
   }
@@ -577,7 +602,7 @@ function onSubmitClick() {
     openSetting(true)
     return
   }
-  handleSubmit()
+  askSubmitNote((note) => handleSubmit(note))
 }
 
 // 统一两字文案：无论新建 / 驳回重提 / 修改稿提交都叫「提交」，
@@ -708,6 +733,13 @@ onMounted(async () => {
       </VSpace>
     </template>
   </VModal>
+
+  <SubmitNoteModal
+    v-if="noteVisible"
+    :saving="noteSaving"
+    @close="noteVisible = false"
+    @confirm="confirmSubmitNote"
+  />
 
   <PostPreviewModal
     v-if="previewModalVisible"

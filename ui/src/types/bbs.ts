@@ -331,6 +331,8 @@ export interface PostRequest {
   /** 摘要是否自动截取；不传表示不修改（新建默认自动） */
   autoExcerpt?: boolean
   content?: string
+  /** 提交审核时给审核人的附言（仅提交路径消费，记入审核记录） */
+  submitNote?: string
   pinned?: boolean
   pinPriority?: number
 }

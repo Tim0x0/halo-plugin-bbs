@@ -39,6 +39,7 @@ import PostStatusEnd from '@/shared/PostStatusEnd.vue'
 import PostCommentsField from '@/shared/PostCommentsField.vue'
 import PostLockField from '@/shared/PostLockField.vue'
 import PostModerationRecords from '@/shared/PostModerationRecords.vue'
+import SubmitNoteModal from '@/shared/SubmitNoteModal.vue'
 
 /**
  * UC「我的帖子」：登录用户管理自己发布的帖子（发帖 / 编辑 / 删除）。
@@ -231,39 +232,65 @@ const settingPrimaryLabel = computed(() =>
   settingPost.value?.phase === 'PUBLISHED' ? '提交修改' : '提交'
 )
 
-async function submitFromSetting() {
-  const post = settingPost.value!
-  settingPublishing.value = true
+// —— 提交附言弹窗：与驳回弹窗同范式，附言可选；确认后跑真正的提交续体 ——
+const noteVisible = ref(false)
+const noteSaving = ref(false)
+let noteContinuation: ((note: string) => Promise<void>) | null = null
+
+function askSubmitNote(continuation: (note: string) => Promise<void>) {
+  noteContinuation = continuation
+  noteVisible.value = true
+}
+
+async function confirmSubmitNote(note: string) {
+  noteSaving.value = true
   try {
-    await ucApi.submit(post.name, settingBody())
-    Toast.success('已提交')
-    settingVisible.value = false
-    await fetchPosts()
+    await noteContinuation?.(note)
+    noteVisible.value = false
   } catch {
     /* 请求错误由全局拦截器提示 */
   } finally {
-    settingPublishing.value = false
+    noteSaving.value = false
   }
+}
+
+function submitFromSetting() {
+  askSubmitNote(async (note) => {
+    const post = settingPost.value!
+    settingPublishing.value = true
+    try {
+      await ucApi.submit(post.name, {
+        ...settingBody(),
+        submitNote: note || undefined,
+      })
+      Toast.success('已提交')
+      settingVisible.value = false
+      await fetchPosts()
+    } finally {
+      settingPublishing.value = false
+    }
+  })
 }
 
 /**
  * 列表直接提交（草稿 / 已驳回）：缺分类先去设置弹窗补齐（弹窗里有「提交」）；
  * 否则按帖子现有元数据原样提交——正文不传，服务端保留快照链内容。
  */
-async function submitPost(post: BbsPostVo) {
+function submitPost(post: BbsPostVo) {
   if (!post.category) {
-    await openSetting(post)
+    void openSetting(post)
     return
   }
-  try {
+  askSubmitNote(async (note) => {
     const { data } = await ucApi.getMine(post.name)
     const f = postFormFrom(data, { managed: false })
-    await ucApi.submit(post.name, settingBodyFrom(f))
+    await ucApi.submit(post.name, {
+      ...settingBodyFrom(f),
+      submitNote: note || undefined,
+    })
     Toast.success('已提交')
     await fetchPosts()
-  } catch {
-    /* 请求错误由全局拦截器提示 */
-  }
+  })
 }
 
 /** 撤回待审核提交：新帖退回草稿；修改稿退回草稿态，前台发布版不受影响 */
@@ -473,6 +500,13 @@ onMounted(() => {
     @confirm="saveSetting"
     @primary="submitFromSetting"
     @close="settingVisible = false"
+  />
+
+  <SubmitNoteModal
+    v-if="noteVisible"
+    :saving="noteSaving"
+    @close="noteVisible = false"
+    @confirm="confirmSubmitNote"
   />
 
   <!-- 审核记录：唯一入口在行下拉菜单（编辑器不挂此按钮） -->

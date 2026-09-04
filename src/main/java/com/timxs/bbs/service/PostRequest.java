@@ -38,6 +38,10 @@ public class PostRequest {
             + "并发冲突检测")
     private String content;
 
+    @Schema(description = "提交审核时给审核人的附言（仅提交路径消费，记入 SUBMITTED "
+            + "审核记录；不落在帖子本体上）", maxLength = 500)
+    private String submitNote;
+
     @Schema(description = "是否置顶（仅管理端）")
     private Boolean pinned;
 

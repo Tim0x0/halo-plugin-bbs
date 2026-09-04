@@ -312,7 +312,10 @@ public class BbsPostService {
                                             pending
                                                     ? BbsModerationRecord.Action.SUBMITTED
                                                     : BbsModerationRecord.Action.PUBLISHED,
-                                            owner, null, oldDraftPhase.name(),
+                                            // 附言只随 SUBMITTED 进审核记录，与驳回原因对称
+                                            owner,
+                                            pending ? request.getSubmitNote() : null,
+                                            oldDraftPhase.name(),
                                             pending ? BbsPost.Phase.PENDING.name()
                                                     : BbsPost.Phase.PUBLISHED.name());
                                 });
@@ -344,7 +347,9 @@ public class BbsPostService {
                                         pending
                                                 ? BbsModerationRecord.Action.SUBMITTED
                                                 : BbsModerationRecord.Action.PUBLISHED,
-                                        owner, null, fromPhase.name(),
+                                        owner,
+                                        pending ? request.getSubmitNote() : null,
+                                        fromPhase.name(),
                                         pending ? BbsPost.Phase.PENDING.name()
                                                 : BbsPost.Phase.PUBLISHED.name());
                             });
