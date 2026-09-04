@@ -195,13 +195,13 @@ pnpm type-check   # vue-tsc 类型检查
 | `BBS_CATEGORY_NAME` | Variable | 目标分类的 `metadata.name`（形如 `category-xxxxxxxx`） |
 | `BBS_PROJECT_NAME` | Variable（可选） | 标题前缀，按原样拼接（格式自己写，如 `[BBS 社区]`、`BBS 社区 |`）。有值则标题为 `{前缀} {tag} 发布说明`；不配则保持 `{tag} 发布说明`。手动运行时 `title` 输入优先 |
 
-`metadata.name` 是分类的资源主键，**既不是中文名也不是 slug**——`spec.displayName` 才是中文名，`spec.slug` 是前台链接别名。查询方式：
+`metadata.name` 是分类的资源主键，**既不是中文名也不是 slug**——中文名是 `displayName`，前台链接别名是 `slug`。分类查询接口匿名可读，浏览器直接打开即可：
 
-```bash
-curl -s "https://你的站点/apis/bbs.timxs.com/v1alpha1/bbscategories" \
-  -H "Authorization: Bearer <令牌>" \
-  | jq '.items[] | {name: .metadata.name, 名称: .spec.displayName, slug: .spec.slug}'
 ```
+https://你的站点/apis/api.bbs.timxs.com/v1alpha1/categories
+```
+
+返回为 JSON 数组（无 `items` 包裹），仅含启用中的分类，`priority` 升序；其中 `name` 即分类的 `metadata.name`，`displayName` / `slug` 为其中文名与链接别名。
 
 发帖行为：
 
