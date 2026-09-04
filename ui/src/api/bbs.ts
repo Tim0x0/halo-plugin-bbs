@@ -12,6 +12,7 @@ import type {
   BbsPostVo,
   BbsReplyAdminVo,
   BbsSnapshotDto,
+  BbsUcConfig,
   CategoryVo,
   ContentUpdateParam,
   JsonPatchOp,
@@ -252,6 +253,10 @@ export const ucApi = {
   /** 普通保存：写入 headSnapshot；已发布帖不会切换 releaseSnapshot。 */
   saveDraft(name: string, body: PostRequest) {
     return axiosInstance.put<BbsPost>(`${UC_BASE}/bbsposts/${name}`, body)
+  },
+  /** 审核策略：提交入口据此决定是否询问补充说明（免审直接提交）。 */
+  getConfig() {
+    return axiosInstance.get<BbsUcConfig>(`${UC_BASE}/config`)
   },
   /** 显式提交：按审核策略进入 PENDING 或 PUBLISHED。 */
   submit(name: string, body: PostRequest) {

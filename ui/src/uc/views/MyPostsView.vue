@@ -29,6 +29,7 @@ import {
   defaultPostForm,
   postFormFrom,
   type BbsPostVo,
+  type BbsUcConfig,
   type CategoryVo,
   type PostFormState,
 } from '@/types/bbs'
@@ -254,43 +255,73 @@ async function confirmSubmitNote(note: string) {
   }
 }
 
+// 审核策略：提交是否进审核，据此决定要不要问附言（免审直接提交，不打断）
+const ucConfig = ref<BbsUcConfig>({ postNeedsReview: false, editNeedsReview: false })
+
+async function loadConfig() {
+  try {
+    const { data } = await ucApi.getConfig()
+    ucConfig.value = data
+  } catch {
+    /* 失败保持免审默认：直接提交，只是少问一次附言 */
+  }
+}
+
+function submitNeedsReview(post: BbsPostVo) {
+  return post.phase === 'PUBLISHED'
+    ? ucConfig.value.editNeedsReview
+    : ucConfig.value.postNeedsReview
+}
+
+async function doSubmitFromSetting(note: string) {
+  const post = settingPost.value!
+  settingPublishing.value = true
+  try {
+    await ucApi.submit(post.name, {
+      ...settingBody(),
+      submitNote: note || undefined,
+    })
+    Toast.success('已提交')
+    settingVisible.value = false
+    await fetchPosts()
+  } finally {
+    settingPublishing.value = false
+  }
+}
+
 function submitFromSetting() {
-  askSubmitNote(async (note) => {
-    const post = settingPost.value!
-    settingPublishing.value = true
-    try {
-      await ucApi.submit(post.name, {
-        ...settingBody(),
-        submitNote: note || undefined,
-      })
-      Toast.success('已提交')
-      settingVisible.value = false
-      await fetchPosts()
-    } finally {
-      settingPublishing.value = false
-    }
-  })
+  if (!submitNeedsReview(settingPost.value!)) {
+    void doSubmitFromSetting('')
+    return
+  }
+  askSubmitNote(doSubmitFromSetting)
 }
 
 /**
  * 列表直接提交（草稿 / 已驳回）：缺分类先去设置弹窗补齐（弹窗里有「提交」）；
  * 否则按帖子现有元数据原样提交——正文不传，服务端保留快照链内容。
  */
+async function doSubmitPost(post: BbsPostVo, note: string) {
+  const { data } = await ucApi.getMine(post.name)
+  const f = postFormFrom(data, { managed: false })
+  await ucApi.submit(post.name, {
+    ...settingBodyFrom(f),
+    submitNote: note || undefined,
+  })
+  Toast.success('已提交')
+  await fetchPosts()
+}
+
 function submitPost(post: BbsPostVo) {
   if (!post.category) {
     void openSetting(post)
     return
   }
-  askSubmitNote(async (note) => {
-    const { data } = await ucApi.getMine(post.name)
-    const f = postFormFrom(data, { managed: false })
-    await ucApi.submit(post.name, {
-      ...settingBodyFrom(f),
-      submitNote: note || undefined,
-    })
-    Toast.success('已提交')
-    await fetchPosts()
-  })
+  if (!submitNeedsReview(post)) {
+    void doSubmitPost(post, '')
+    return
+  }
+  askSubmitNote((note) => doSubmitPost(post, note))
 }
 
 /** 撤回待审核提交：新帖退回草稿；修改稿退回草稿态，前台发布版不受影响 */
@@ -347,6 +378,7 @@ function onDelete(post: BbsPostVo) {
 
 onMounted(() => {
   fetchCategories()
+  loadConfig()
 })
 </script>
 

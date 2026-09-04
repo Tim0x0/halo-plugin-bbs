@@ -16,9 +16,11 @@ import static org.springdoc.core.fn.builders.schema.Builder.schemaBuilder;
 import com.timxs.bbs.extension.BbsPost;
 import com.timxs.bbs.query.BbsQueryService;
 import com.timxs.bbs.service.BbsPostService;
+import com.timxs.bbs.service.BbsSettings;
 import com.timxs.bbs.service.ContentUpdateParam;
 import com.timxs.bbs.service.PostRequest;
 import com.timxs.bbs.service.RevertSnapshotParam;
+import java.util.Map;
 import com.timxs.bbs.util.BbsPageRequests;
 import com.timxs.bbs.vo.BbsContentVo;
 import com.timxs.bbs.vo.BbsPostVo;
@@ -54,10 +56,16 @@ public class BbsUcEndpoint implements CustomEndpoint {
 
     private final BbsPostService postService;
     private final BbsQueryService queryService;
+    private final BbsSettings settings;
 
     @Override
     public RouterFunction<ServerResponse> endpoint() {
         return SpringdocRouteBuilder.route()
+                .GET("/config", this::getConfig, builder -> builder
+                        .operationId("GetBbsUcConfig").tag(TAG)
+                        .description("审核策略：UC 提交入口据此决定是否询问补充说明"
+                                + "（免审直接提交，不构成打断）")
+                        .response(responseBuilder().implementation(Map.class)))
                 .GET("/bbsposts/mine", this::listMine, builder -> builder
                         .operationId("ListMyBbsPosts").tag(TAG)
                         .description("我的帖子列表（可选 phase / type / 标题关键词）")
@@ -189,6 +197,16 @@ public class BbsUcEndpoint implements CustomEndpoint {
     }
 
     /** 别名占用预检：只回布尔，不暴露占用者是谁（官方同款只判存在性）。 */
+    /**
+     * 审核策略出口：语义与提交链路一致——未发布内容提交看 postNeedsReview，
+     * 已发布帖提交修改看 editNeedsReview（posting 免审时恒 false）。
+     */
+    private Mono<ServerResponse> getConfig(ServerRequest request) {
+        return settings.content().flatMap(policy -> ServerResponse.ok().bodyValue(Map.of(
+                "postNeedsReview", policy.required(),
+                "editNeedsReview", policy.required() && policy.editNeedsReview())));
+    }
+
     private Mono<ServerResponse> isSlugTaken(ServerRequest request) {
         return postService.isSlugTaken(
                         request.queryParam("slug").orElse(""),

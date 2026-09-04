@@ -337,6 +337,14 @@ export interface PostRequest {
   pinPriority?: number
 }
 
+/** UC 审核策略（/config）：前端据此决定提交是否询问补充说明 */
+export interface BbsUcConfig {
+  /** 未发布内容提交是否需审核 */
+  postNeedsReview: boolean
+  /** 已发布帖提交修改是否需重审 */
+  editNeedsReview: boolean
+}
+
 /** 编辑器 / 设置表单的本地状态 */
 export interface PostFormState {
   title: string

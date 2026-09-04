@@ -40,6 +40,7 @@ import {
   defaultPostForm,
   postFormFrom,
   type BbsPost,
+  type BbsUcConfig,
   type CategoryVo,
   type PostDetailItem,
   type PostRequest,
@@ -586,9 +587,36 @@ async function confirmSubmitNote(note: string) {
   }
 }
 
+// 审核策略：提交是否进审核，据此决定要不要问附言（免审直接提交，不打断）
+const ucConfig = ref<BbsUcConfig>({ postNeedsReview: false, editNeedsReview: false })
+
+async function loadConfig() {
+  try {
+    const { data } = await ucApi.getConfig()
+    ucConfig.value = data
+  } catch {
+    /* 失败保持免审默认：直接提交，只是少问一次附言 */
+  }
+}
+
+/** 新建看 postNeedsReview；已发布帖提交修改看 editNeedsReview */
+function submitNeedsReview() {
+  return loadedPhase.value === 'PUBLISHED'
+    ? ucConfig.value.editNeedsReview
+    : ucConfig.value.postNeedsReview
+}
+
+function submitWithNoteGate() {
+  if (submitNeedsReview()) {
+    askSubmitNote((note) => handleSubmit(note))
+  } else {
+    handleSubmit()
+  }
+}
+
 function onSettingSubmit() {
   if (pendingSubmit.value) {
-    askSubmitNote((note) => handleSubmit(note))
+    submitWithNoteGate()
   } else {
     handleSave()
   }
@@ -604,7 +632,7 @@ function onSubmitClick() {
     openSetting(true)
     return
   }
-  askSubmitNote((note) => handleSubmit(note))
+  submitWithNoteGate()
 }
 
 // 统一两字文案：无论新建 / 驳回重提 / 修改稿提交都叫「提交」，
@@ -612,6 +640,7 @@ function onSubmitClick() {
 const submitLabel = '提交'
 
 onMounted(async () => {
+  loadConfig()
   try {
     if (!currentUserStore.currentUser) {
       await currentUserStore.fetchCurrentUser()
