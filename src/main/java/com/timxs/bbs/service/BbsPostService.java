@@ -312,9 +312,9 @@ public class BbsPostService {
                                             pending
                                                     ? BbsModerationRecord.Action.SUBMITTED
                                                     : BbsModerationRecord.Action.PUBLISHED,
-                                            // 附言只随 SUBMITTED 进审核记录，与驳回原因对称
-                                            owner,
-                                            pending ? request.getSubmitNote() : null,
+                                            // 附言随提交事件进审核记录（需审=SUBMITTED、
+                                            // 免审=PUBLISHED 都记），与驳回原因对称
+                                            owner, request.getSubmitNote(),
                                             oldDraftPhase.name(),
                                             pending ? BbsPost.Phase.PENDING.name()
                                                     : BbsPost.Phase.PUBLISHED.name());
@@ -347,8 +347,7 @@ public class BbsPostService {
                                         pending
                                                 ? BbsModerationRecord.Action.SUBMITTED
                                                 : BbsModerationRecord.Action.PUBLISHED,
-                                        owner,
-                                        pending ? request.getSubmitNote() : null,
+                                        owner, request.getSubmitNote(),
                                         fromPhase.name(),
                                         pending ? BbsPost.Phase.PENDING.name()
                                                 : BbsPost.Phase.PUBLISHED.name());

@@ -225,9 +225,11 @@ onMounted(load)
   color: var(--bbs-danger);
 }
 
+/* 灰边灰底保持中性（不抢驳回的红语义），文字用正文色——附言是作者
+   主动写的说明，不是可弱读的次要信息 */
 .timeline-card .reason--note {
   border-color: var(--bbs-border);
   background: var(--bbs-bg-soft);
-  color: var(--bbs-text-muted);
+  color: var(--bbs-text);
 }
 </style>

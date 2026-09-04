@@ -18,13 +18,14 @@ const note = ref('')
 </script>
 
 <template>
-  <VModal title="提交审核" :width="500" mount-to-body @close="emit('close')">
+  <!-- 文案中性：免审场景提交即发布，没有「审核人」；附言统一记入提交事件 -->
+  <VModal title="提交" :width="500" mount-to-body @close="emit('close')">
     <FormKit
       v-model="note"
       type="textarea"
-      label="给审核人的说明"
+      label="补充说明"
       :rows="3"
-      help="记入审核记录的提交事件，审核人可见，可留空"
+      help="记入本次提交事件（审核记录可见），可留空"
     />
     <template #footer>
       <VSpace>
