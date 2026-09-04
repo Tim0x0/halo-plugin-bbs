@@ -1157,9 +1157,13 @@ public class BbsQueryService {
                         ? BbsPost.Phase.DRAFT.name() : spec.getPhase().name())
                 .draftPhase(draft == null || draft.getPhase() == null
                         ? null : draft.getPhase().name())
+                // 未提交修改：工作稿存在（纯设置修改稿也算）或正文 head ≠ release；
+                // 列表绿点与「提交修改」共用此口径
                 .hasDraft(editing && spec.getPhase() == BbsPost.Phase.PUBLISHED
-                        && StringUtils.isNotBlank(spec.getHeadSnapshot())
-                        && !Objects.equals(spec.getHeadSnapshot(), spec.getReleaseSnapshot()))
+                        && (spec.getDraft() != null
+                                || (StringUtils.isNotBlank(spec.getHeadSnapshot())
+                                        && !Objects.equals(spec.getHeadSnapshot(),
+                                                spec.getReleaseSnapshot()))))
                 .baseSnapshot(editing ? spec.getBaseSnapshot() : null)
                 .headSnapshot(editing ? spec.getHeadSnapshot() : null)
                 .releaseSnapshot(editing ? spec.getReleaseSnapshot() : null)
