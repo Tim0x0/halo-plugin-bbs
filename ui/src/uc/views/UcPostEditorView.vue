@@ -579,6 +579,8 @@ async function confirmSubmitNote(note: string) {
   try {
     await noteContinuation?.(note)
     noteVisible.value = false
+  } catch {
+    /* 请求错误由全局拦截器提示 */
   } finally {
     noteSaving.value = false
   }
