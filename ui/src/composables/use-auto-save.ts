@@ -8,8 +8,9 @@ import type { BbsContentCache } from './use-content-cache'
  *
  * - 正文变更停止 20 秒后静默保存（每次输入重置计时）
  * - 窗口失焦时保存；关闭页面前尽力保存
- * - 站内路由离开时尽力保存（对齐官方 onBeforeRouteLeave）——官方同样不等待
- *   这次保存完成，请求是 fire-and-forget；真正的兜底是本地缓存
+ * - 站内路由离开时等本次保存落定再切换（比官方「不等待」多走一步：
+ *   我们的列表绿点 / 提交入口吃服务器状态，首屏不能取到保存前状态）；
+ *   超时 / 失败仍放行导航，真正的兜底是本地缓存
  * - 只在存在本地缓存条目时触发；允许把正文清空后自动保存
  *
  * 能否真正落库（设置弹窗是否开着、新建是否已满足建稿条件等）
@@ -34,9 +35,19 @@ export function useAutoSave(
     }
   })
 
-  // 官方同款：站内离开编辑器路由时尽力保存一次（不等待完成）
+  // 站内离开：等本次保存落定再切换——列表首屏与「提交修改」入口吃服务器
+  // 状态，fire-and-forget 会让首屏取到保存前状态（绿点要刷新才出）。官方
+  // 「不等待」的前提是官方没有这类消费方，我们有。超时 / 失败仍放行导航，
+  // 本地缓存继续兜底（与不等待等价的最坏情况）。
   onBeforeRouteLeave(() => {
-    void handleAutoSave()
+    const p = handleAutoSave()
+    if (!p) {
+      return true
+    }
+    return Promise.race([
+      Promise.resolve(p).catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]).then(() => true)
   })
 
   // beforeunload 里发不保证完成的请求是尽力而为，真正的兜底是本地缓存
