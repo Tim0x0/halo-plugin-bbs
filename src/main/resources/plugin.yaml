@@ -21,7 +21,7 @@ spec:
   repo: https://github.com/Tim0x0/halo-plugin-bbs
   issues: https://blog.timxs.com/bbs?category=bbs-community
   displayName: "BBS 社区"
-  description: "为 Halo 提供社区论坛功能，支持帖子、问答与公告的发布、分类与审核。"
+  description: "轻量社区论坛，支持帖子、问答与公告的发布、分类与审核。"
   license:
     - name: "GPL-3.0"
       url: "https://github.com/Tim0x0/halo-plugin-bbs/blob/main/LICENSE"
