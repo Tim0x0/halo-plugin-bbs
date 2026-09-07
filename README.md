@@ -180,7 +180,7 @@ pnpm type-check   # vue-tsc 类型检查
 
 ## 发布自动发帖（可选）
 
-> 面向在 GitHub 上托管本项目、以 GitHub Releases 发版的维护者；不在此场景可忽略本节。
+> 面向在 GitHub 上托管项目、以 GitHub Releases 发版的维护者；不在此场景可忽略本节。
 
 仓库自带工作流 `.github/workflows/bbs-post.yaml`：发布 release 时，自动把发布说明发到**你自己的** BBS 社区（调 Console API 建帖，正文由 release notes 转 HTML），版本公告不用再手工发一遍。未配置时它不会做任何事；确定不需要可直接删除该文件，不影响插件本身。
 
