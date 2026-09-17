@@ -23,8 +23,9 @@
     }
     document.querySelectorAll('[data-bbs-theme-icon]').forEach(function (el) {
       /* SVGElement 没有 hidden 这个 JS 属性，赋值只挂了个无效属性、[hidden]
-         选择器匹配不到——必须走 toggleAttribute 操作特性本身 */
-      el.toggleAttribute('hidden', el.getAttribute('data-bbs-theme-icon') !== mode);
+         选择器匹配不到。用 set/removeAttribute 操作特性本身。 */
+      if (el.getAttribute('data-bbs-theme-icon') === mode) el.removeAttribute('hidden');
+      else el.setAttribute('hidden', '');
     });
     document.querySelectorAll('[data-bbs-theme-cycle]').forEach(function (el) {
       el.setAttribute('aria-label', '外观：' + (THEME_LABEL[mode] || '跟随系统'));
@@ -184,9 +185,9 @@
   /* 时间显示统一由服务端渲染（BbsTimeFormats + 后台 dateFormat 设置），
      此处不做客户端改写——时间格式以服务端渲染为准 */
 
-  /* 右栏目录：正文 h2/h3 ≥ 3 时填充显示（仅桌面右栏；移动端不放目录，对齐主流论坛），
-     滚动时高亮当前章节 */
-  var prose = document.querySelector('.prose');
+  /* 右栏目录：楼主正文 h2/h3 ≥ 3 时填充显示（仅桌面右栏；移动端不放目录）。
+     顶格对应编辑器「标题 2」，h3 缩进；正文 h1 不进目录（页面已有帖子标题）。 */
+  var prose = document.querySelector('.bbs-post .prose');
   var side = document.getElementById('bbsSideToc');
   if (prose && side) {
     var heads = prose.querySelectorAll('h2, h3');
@@ -202,19 +203,33 @@
       });
       side.classList.add('has-toc');
 
-      // 标题进入视口上部阅读带（8%~30%）即视为当前节
-      if ('IntersectionObserver' in window) {
-        var io = new IntersectionObserver(function (entries) {
-          entries.forEach(function (en) {
-            if (!en.isIntersecting) return;
-            list.querySelectorAll('a').forEach(function (a) {
-              a.classList.toggle('is-active',
-                a.getAttribute('href') === '#' + en.target.id);
-            });
-          });
-        }, { rootMargin: '-8% 0px -70% 0px' });
-        heads.forEach(function (h) { io.observe(h); });
-      }
+      // 滚动高亮：顶栏下方一条阅读线（与 scroll-margin-top: 70px 对齐），
+      // 高亮最后一个已经越过该线的标题。
+      var tocLinks = list.querySelectorAll('a');
+      var tocOffset = 70;
+      var setActive = function (id) {
+        tocLinks.forEach(function (a) {
+          a.classList.toggle('is-active', a.getAttribute('href') === '#' + id);
+        });
+      };
+      var syncActive = function () {
+        var current = heads[0];
+        for (var i = 0; i < heads.length; i++) {
+          if (heads[i].getBoundingClientRect().top <= tocOffset) current = heads[i];
+          else break;
+        }
+        if (current && current.id) setActive(current.id);
+      };
+      var tocTicking = false;
+      window.addEventListener('scroll', function () {
+        if (tocTicking) return;
+        tocTicking = true;
+        requestAnimationFrame(function () {
+          tocTicking = false;
+          syncActive();
+        });
+      }, { passive: true });
+      syncActive();
     }
   }
 
