@@ -532,7 +532,6 @@ button {
   flex: none;
   width: 34px;
   height: 34px;
-  margin-left: 2px;
   border-radius: 50%;
   color: var(--b-text-2);
 }
