@@ -179,22 +179,53 @@ pnpm dev          # watch 构建
 pnpm type-check   # vue-tsc 类型检查
 ```
 
-## 发布自动发帖（可选）
+## Release 自动发帖（可选）
 
-> 面向在 GitHub 上托管项目、以 GitHub Releases 发版的维护者；不在此场景可忽略本节。
+> 面向在 GitHub 上托管、以 GitHub Releases 发版的项目；不在此场景可忽略本节。
 
-仓库自带工作流 `.github/workflows/bbs-post.yaml`：发布 release 时，自动把发布说明发到**你自己的** BBS 社区（调 Console API 建帖，正文由 release notes 转 HTML），版本公告不用再手工发一遍。未配置时它不会做任何事；确定不需要可直接删除该文件，不影响插件本身。
+`.github/workflows/reusable-bbs-post.yaml` 是可复用工作流：发布 release 时，把发布说明发到**你自己的** BBS 社区（调 Console API 建帖，正文由 release notes 转 HTML），版本公告不用再手工发一遍。任何仓库都可直接引用——本仓库的入口是 `bbs-post.yaml`，其他仓库在 `.github/workflows/` 下新建同名文件即可，与本仓库只有 `uses` 一行不同：
+
+```yaml
+name: 同步 BBS 公告
+
+on:
+  release:
+    types: [published]      # 发布 release 时自动运行
+  workflow_dispatch:        # 允许在 Actions 页面手动运行（补发旧版本、编辑 release 说明后同步）
+    inputs:
+      tag:
+        description: 'Release tag（如 v1.2.3），将创建或更新该版本对应的帖子'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  sync-bbs-post:
+    uses: Tim0x0/halo-plugin-bbs/.github/workflows/reusable-bbs-post.yaml@main
+    with:
+      tag: ${{ inputs.tag }}                          # 手动运行时为所填 tag；自动触发时为空
+      halo-base-url: ${{ vars.HALO_BASE_URL }}
+      category-name: ${{ vars.BBS_CATEGORY_NAME }}
+      project-name: ${{ vars.BBS_PROJECT_NAME }}
+    secrets:
+      bbs-post-pat: ${{ secrets.BBS_POST_PAT }}
+```
+
+`with` 另有可选入参 `status`（`published` / `draft`，强制发布或存草稿；默认 `auto`）与 `title`（自定义标题）。`@main` 引用本仓库主分支上的当前版本。
 
 ### 配置
 
-仓库 **Settings → Secrets and variables → Actions**：
+接入仓库的 **Settings → Secrets and variables → Actions**：
 
 | 配置项 | 类型 | 说明 |
 | --- | --- | --- |
-| `BBS_POST_PAT` | Secret | **本插件所在站点**的个人访问令牌，持牌账号需有「BBS 社区版主」（`bbs-moderate`）及以上角色。与官方 CD 上传应用市场用的 `halo-pat`（halo.run 官方站凭据）是两回事，勿混用 |
+| `BBS_POST_PAT` | Secret | **发帖目标站点**的个人访问令牌，持牌账号需有「BBS 社区版主」（`bbs-moderate`）及以上角色。与官方 CD 上传应用市场用的 `halo-pat`（halo.run 官方站凭据）是两回事，勿混用 |
 | `HALO_BASE_URL` | Variable | 站点地址（如 `https://example.com`），须可被 GitHub 公网访问 |
 | `BBS_CATEGORY_NAME` | Variable | 目标分类的 `metadata.name`（形如 `category-xxxxxxxx`） |
-| `BBS_PROJECT_NAME` | Variable（可选） | 标题前缀，按原样拼接（格式自己写，如 `[BBS 社区]`、`BBS 社区 |`）。有值则标题为 `{前缀} {tag} 发布说明`；不配则保持 `{tag} 发布说明`。手动运行时 `title` 输入优先 |
+| `BBS_PROJECT_NAME` | Variable（可选） | 标题前缀，按原样拼接（格式自己写，如 `[BBS 社区]`、`BBS 社区 |`）。有值则标题为 `{前缀} {tag} 发布说明`；不配则保持 `{tag} 发布说明`。`with` 传了 `title` 则以其为准 |
+
+未配置时工作流在「校验入参」一步报错停止，不会发帖，也不影响插件本身；本仓库不需要此功能可直接删除 `bbs-post.yaml`。
 
 `metadata.name` 是分类的资源主键，**既不是中文名也不是 slug**——中文名是 `displayName`，前台链接别名是 `slug`。分类查询接口匿名可读，浏览器直接打开即可：
 
@@ -206,8 +237,9 @@ https://你的站点/apis/api.bbs.timxs.com/v1alpha1/categories
 
 发帖行为：
 
-- **状态**：正式 release → 直接发布；预发布（prerelease）→ 存草稿；手动运行（Actions → 同步 BBS 公告 → Run workflow）可覆盖
+- **状态**：正式 release → 直接发布；预发布（prerelease）→ 存草稿；`status` 入参可强制
 - **不重复发帖**：帖子别名固定为 `release-<tag>`（如 `v1.2.3` → `release-v123`）。删了 release 重发、手动重跑都只更新已有帖；回收站内的帖视为不存在，会新建
+- **手动运行**：Actions → 同步 BBS 公告 → Run workflow，填写 tag。按 tag 读取该 release 当前的说明与附件，其余与自动触发一致；用于补发接入前的版本，或在编辑 release 说明后同步到帖子（编辑说明不触发自动发帖）
 - **内容**：标题默认 `<tag> 发布说明`（`tag` 来自 git tag，不是 GitHub Release 标题）；配了 `BBS_PROJECT_NAME` 则按原样作为前缀拼成 `{前缀} {tag} 发布说明`。正文前后自动拼 release 页面链接与附件下载列表（会等待 CD 上传完 jar，超时则降级为不带下载链接）
 
 ## 鸣谢
