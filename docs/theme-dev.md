@@ -9,7 +9,8 @@
 在主题 `templates/` 下提供同名模板即可覆盖插件默认页：
 
 - `bbs.html` — 列表页
-- `bbs_post.html` — 详情页（编辑器预览 `/bbs/preview/{name}` 渲染同一模板，覆盖同样生效）
+- `bbs_post.html` — 详情页（编辑器预览 `/bbs/preview/{name}` 渲染同一模板，覆盖同样生效）。
+  额外 model：`bestAnswer`（问答帖最佳答案的只读评论 VO，未设时不存在）
 
 > BBS 没有独立作者页（无 `bbs_author.html` / `/bbs/u/{username}`）。请在主题作者页（如 `/authors/{name}`）用 Finder 聚合 BBS 数据，或依赖 interaction-plus 用户卡跳转。
 
@@ -63,7 +64,8 @@
 | `countPosts()` | `Mono<Long>` | 已发布总数（含公告） |
 
 `BbsPostVo` 主要字段：`name` / `title` / `slug` / `type` / `phase` / `pinned` / `pinnedInView` /
-`pinPriority` / `locked` / `solved` / `edited`（发布后正文有改动；渲染「已编辑」以此为准）/
+`pinPriority` / `locked` / `solved` / `bestAnswerCommentName`（问答帖最佳答案评论名）/
+`edited`（发布后正文有改动；渲染「已编辑」以此为准）/
 `commentsCount` / `excerpt` / `content`（仅详情）/ `permalink` /
 `category`（内联 `displayName`/`color`/`icon`/`iconSvg`/`slug`/`parent`/`children`）/
 `owner`（内联 `name`/`displayName`/`avatar`）/ `publishTime` / `lastActivityTime` / `lastEditTime`。
@@ -81,7 +83,7 @@
 | `GET /posts/{slug}` | 详情（含正文） |
 | `GET /announcements?limit=` | 已发布公告 |
 | `GET /categories` | 启用中的分类 |
-| `GET /posts/{name}/comments?page=&size=` | 锁定帖的只读评论（`owner.name` 仅 User kind 返回） |
+| `GET /posts/{name}/comments?page=&size=` | 锁定帖的只读评论（`owner.name` 仅 User kind 返回；顶层 `floor` 为冻住楼号） |
 | `GET /comments/{name}/replies?page=&size=` | 某评论的只读楼中楼 |
 
 ## 数据模型

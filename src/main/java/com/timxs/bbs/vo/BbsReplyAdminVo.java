@@ -21,12 +21,15 @@ public class BbsReplyAdminVo {
     /** HTML（写入时已净化） */
     private String content;
 
+    /** 是否已通过。仅 Console 审核面下发；UC 不下发。 */
     private Boolean approved;
 
+    /** 是否隐藏。仅 Console 审核面下发；UC 不下发。 */
     private Boolean hidden;
 
     private Instant creationTime;
 
+    /** 通过时间。仅 Console 审核面下发；UC 不下发。 */
     private Instant approvedTime;
 
     /** 删除中（已设删除时间戳、finalizer 未跑完） */

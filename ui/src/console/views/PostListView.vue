@@ -94,8 +94,8 @@ const settingSaving = ref(false)
 const settingPublishing = ref(false)
 /** 审核记录弹窗的目标帖名；审核留痕的唯一入口是列表行下拉 */
 const moderationName = ref('')
-/** 评论管理弹窗的目标帖名；评论列（有未审核时上色）点击打开 */
-const commentsPost = ref('')
+/** 评论管理弹窗的目标帖；评论列点击打开 */
+const commentsPost = ref<BbsPostVo>()
 
 const phaseItems = computed(() => [
   { label: '全部', value: undefined },
@@ -855,7 +855,7 @@ onMounted(() => {
                 :count="post.totalCommentCount"
                 :pending="post.pendingCommentCount"
                 :clickable="canModerate && !inRecycleBin"
-                @open="commentsPost = post.name"
+                @open="commentsPost = post"
               />
               <PostLockField
                 :post="post"
@@ -1074,8 +1074,9 @@ onMounted(() => {
   <!-- 评论管理：评论列点击打开（对齐官方按主题查看评论的弹窗） -->
   <PostCommentListModal
     v-if="commentsPost"
-    :post-name="commentsPost"
-    @close="commentsPost = ''"
+    :post="commentsPost"
+    mode="console"
+    @close="commentsPost = undefined"
   />
 </template>
 

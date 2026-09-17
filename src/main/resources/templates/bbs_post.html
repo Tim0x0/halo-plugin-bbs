@@ -12,6 +12,14 @@
   <meta property="og:description" th:if="${!#strings.isEmpty(post.excerpt)}"
         th:content="${post.excerpt}"/>
   <link rel="stylesheet" th:href="@{/plugins/bbs/assets/static/bbs.css}"/>
+  <script>
+    (function () {
+      try {
+        var m = localStorage.getItem('bbs-theme');
+        if (m === 'light' || m === 'dark') document.documentElement.setAttribute('data-bbs-theme', m);
+      } catch (e) {}
+    })();
+  </script>
   <script th:src="@{/plugins/bbs/assets/static/bbs.js}" defer></script>
   <!-- 互动装扮（interaction-plus）：批量取数引导脚本（脚本负责注入 runtime；无配套 CSS） -->
   <th:block th:if="${hipEnabled}">
@@ -152,6 +160,14 @@
         </a>
       </div>
     </div>
+    <button class="bbs-theme__btn" type="button" data-bbs-theme-cycle aria-label="外观">
+      <svg data-bbs-theme-icon="auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>
+      <svg data-bbs-theme-icon="light" hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+      <svg data-bbs-theme-icon="dark" hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round"><path d="M21 14.5A9 9 0 1 1 9.5 3 7 7 0 0 0 21 14.5z"/></svg>
+    </button>
     <a class="bbs-me__login" th:if="${me == null}"
        th:href="@{/login(redirect_uri=${requestPath})}">登录</a>
   </div>
@@ -175,7 +191,7 @@
     </th:block>
   </nav>
   <!-- 标记行：分类 Tag + 圆标（公告/置顶/问答），无锁；
-       问答圆标始终显示（解决与否都有，解决另有绿 tip） -->
+       问答未解决用问号圆标，已解决换成线框勾（与列表同口径），绿 tip 仍在标题下 -->
   <div class="bbs-phero__marks"
        th:if="${post.category != null || post.pinned || post.type == 'ANNOUNCEMENT' || post.type == 'QUESTION'}">
     <a class="bbs-stag" th:if="${post.category != null and post.category.parent != null}"
@@ -198,7 +214,8 @@
     </a>
     <span class="bbs-bic bbs-bic--ann" th:if="${post.type == 'ANNOUNCEMENT'}" title="公告" aria-label="公告"><svg viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M480 32c0-12.9-7.8-24.6-19.8-29.6s-25.7-2.2-34.9 6.9L381.7 53c-48 48-113.1 75-181 75l-8.7 0-32 0-96 0c-35.3 0-64 28.7-64 64l0 96c0 35.3 28.7 64 64 64l0 128c0 17.7 14.3 32 32 32l64 0c17.7 0 32-14.3 32-32l0-128 8.7 0c67.9 0 133 27 181 75l43.6 43.6c9.2 9.2 22.9 11.9 34.9 6.9s19.8-16.6 19.8-29.6l0-147.6c18.6-8.8 32-32.5 32-60.4s-13.4-51.6-32-60.4L480 32z"/></svg></span>
     <span class="bbs-bic bbs-bic--pin" th:if="${post.pinned}" title="置顶" aria-label="置顶"><svg viewBox="0 0 384 512" fill="currentColor" aria-hidden="true"><path d="M32 32C32 14.3 46.3 0 64 0L320 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-29.5 0 11.4 148.2c36.7 19.9 65.7 53.2 79.5 94.7l1 3c3.3 9.8 1.6 20.5-4.4 28.8s-15.7 13.3-26 13.3L32 352c-10.3 0-19.9-4.9-26-13.3s-7.7-19-4.4-28.8l1-3c13.8-41.5 42.8-74.8 79.5-94.7L93.5 64 64 64C46.3 64 32 49.7 32 32zM160 384l64 0 0 96c0 17.7-14.3 32-32 32s-32-14.3-32-32l0-96z"/></svg></span>
-    <span class="bbs-bic bbs-bic--qa" th:if="${post.type == 'QUESTION'}" title="问答" aria-label="问答"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.4 8a3.6 3.6 0 1 1 5.3 3.1c-1 .55-1.7 1.3-1.7 2.6v.9"/><circle cx="12" cy="18.6" r="1.6" fill="currentColor" stroke="none"/></svg></span>
+    <span class="bbs-bic bbs-bic--qa" th:if="${post.type == 'QUESTION' and !post.solved}" title="问答" aria-label="问答"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.4 8a3.6 3.6 0 1 1 5.3 3.1c-1 .55-1.7 1.3-1.7 2.6v.9"/><circle cx="12" cy="18.6" r="1.6" fill="currentColor" stroke="none"/></svg></span>
+    <span class="bbs-sic bbs-sic--ok" th:if="${post.type == 'QUESTION' and post.solved}" title="已解决" aria-label="已解决"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5 10 17.5 19 7" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
   </div>
   <h1 class="bbs-phero__title">
     <span class="bbs-lock-inline" th:if="${post.locked}" title="已锁定" aria-label="已锁定"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="2"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/></svg></span>
@@ -289,6 +306,61 @@
         </div>
       </div>
     </article>
+
+    <!-- 最佳答案：正文与评论区之间自画一条楼层，不进官方评论组件。
+         锁定帖可跳到只读层 #c-{name}；未锁定滚到评论区。 -->
+    <div class="bbs-flr is-best" th:if="${bestAnswer != null}"
+         th:id="${post.locked} ? |best-${bestAnswer.name}| : null">
+      <hip-user-card th:if="${bestAnswer.owner != null and !#strings.isEmpty(bestAnswer.owner.name)}"
+                     th:attr="user-name=${bestAnswer.owner.name}">
+        <hip-user-avatar scene="comment" th:attr="user-name=${bestAnswer.owner.name}">
+          <img class="bbs-ava bbs-ava--flr" th:if="${!#strings.isEmpty(bestAnswer.owner.avatar)}"
+               th:src="${bestAnswer.owner.avatar}" th:alt="${bestAnswer.owner.displayName}"/>
+          <span class="bbs-ava bbs-ava--flr bbs-ava--letter"
+                th:if="${#strings.isEmpty(bestAnswer.owner.avatar)}"
+                th:attr="data-bbs-letter=${bestAnswer.owner.displayName}">?</span>
+        </hip-user-avatar>
+      </hip-user-card>
+      <span class="bbs-ava bbs-ava--flr bbs-ava--letter"
+            th:if="${bestAnswer.owner == null or #strings.isEmpty(bestAnswer.owner.name)}"
+            th:attr="data-bbs-letter=${bestAnswer.owner != null ? bestAnswer.owner.displayName : '匿'}">?</span>
+      <div class="bbs-flr__main">
+        <div class="bbs-flr__head">
+          <span class="bbs-flr__name" th:if="${bestAnswer.owner != null and hipEnabled and !#strings.isEmpty(bestAnswer.owner.name)}">
+            <hip-user-identity scene="comment" th:attr="user-name=${bestAnswer.owner.name}">
+              <span th:text="${bestAnswer.owner.displayName}">作者</span>
+            </hip-user-identity>
+          </span>
+          <th:block th:if="${bestAnswer.owner != null and !(hipEnabled and !#strings.isEmpty(bestAnswer.owner.name))}"
+                    th:with="authorHref=${bestAnswer.owner.name != null and !#strings.isEmpty(authorLinkTemplate)
+                        ? #strings.replace(authorLinkTemplate, '{name}',
+                            #uris.escapePathSegment(bestAnswer.owner.name))
+                        : ''}">
+            <a class="bbs-flr__name" th:if="${!#strings.isEmpty(authorHref)}"
+               th:href="${authorHref}" th:text="${bestAnswer.owner.displayName}">作者</a>
+            <span class="bbs-flr__name" th:if="${#strings.isEmpty(authorHref)}"
+                  th:text="${bestAnswer.owner != null ? bestAnswer.owner.displayName : '匿名'}">作者</span>
+          </th:block>
+          <span class="bbs-best">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"
+                 stroke-linecap="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>
+            最佳答案
+          </span>
+        </div>
+        <div class="bbs-flr__body prose" th:utext="${bestAnswer.content}">正文</div>
+        <div class="bbs-flr__foot">
+          <time th:if="${bestAnswer.creationTime != null}"
+                th:attr="datetime=${bestAnswer.creationTime}"
+                th:title="${bbsTime.absTitle(bestAnswer.creationTime)}"
+                th:text="${bbsTime.display(bestAnswer.creationTime, dateFormat)}">时间</time>
+          <span class="bbs-flr__actions">
+            <a class="bbs-flr__no" th:if="${bestAnswer.floor != null}"
+               th:href="${post.locked} ? |#c-${bestAnswer.name}| : '#comments'"
+               th:text="|#${bestAnswer.floor}|">#2</a>
+          </span>
+        </div>
+      </div>
+    </div>
 
     <!-- 评论区：正常状态渲染 Halo 评论组件，透明融入帖子流（无卡片）；
          列表页评论数直达此锚点，移动端底部栏亦跳转到这里。

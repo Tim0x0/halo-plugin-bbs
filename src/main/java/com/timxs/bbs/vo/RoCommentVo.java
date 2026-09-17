@@ -46,6 +46,12 @@ public class RoCommentVo {
     private Boolean top;
 
     /**
+     * 楼号（楼主帖为 1；评论从 2 起）。按发表顺序冻在 annotation 里，
+     * 待审核也占号。置顶只改列表位置，号仍是发表时的那一号。仅顶层评论有值。
+     */
+    private Integer floor;
+
+    /**
      * 被回复者（{@code Reply.spec.quoteReply} 指向的那条回复的作者），前端渲染「回复 @昵称」。
      * 直接回复评论、引用目标已删除 / 未审核 / 私密时为 {@code null}。评论自身恒为 null。
      */

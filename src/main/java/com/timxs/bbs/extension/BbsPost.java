@@ -57,6 +57,14 @@ public class BbsPost extends AbstractExtension {
                 + "totalComment - approvedComment；Console/UC 列表据此给评论列上色")
         private Integer pendingCommentCount = 0;
 
+        /**
+         * 下一层评论楼号（只增不减）。楼主占 1，评论从 2 起。
+         * 发评取出当前值写入评论 annotation 后再 +1。删评不回退，空号留给已删层。
+         * 尚未分配过时为 null，首次发号按现有评论数起算。
+         */
+        @Schema(description = "下一层评论楼号（只增不减；未初始化时为 null）")
+        private Integer nextCommentFloor;
+
         @Schema(description = "当前 head Snapshot 的乐观锁版本，供多标签编辑冲突检测")
         private Long headSnapshotVersion;
     }
@@ -123,6 +131,14 @@ public class BbsPost extends AbstractExtension {
 
         @Schema(description = "问答帖是否已解决（发帖人与管理员/版主可切换；仅 QUESTION 有意义）")
         private Boolean solved = false;
+
+        /**
+         * 最佳答案（某条顶层 Comment 的 metadata.name）。仅问答帖有意义。
+         * 设上时 {@link #solved} 为 true；取消最佳答案不自动取消已解决；
+         * 取消已解决会清掉本字段。非问答帖必须为空。
+         */
+        @Schema(description = "最佳答案评论名（仅问答帖；指向顶层 Comment）")
+        private String bestAnswerCommentName;
 
         @Schema(requiredMode = REQUIRED, description = "状态：未发布 / 待审核 / 已发布 / 已驳回")
         private Phase phase = Phase.DRAFT;

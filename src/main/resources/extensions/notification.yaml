@@ -104,3 +104,69 @@ spec:
           <p>原因：<span th:text="${rejectReason}"></span></p>
         </div>
       </div>
+---
+# 帖子新评论通知：结构对齐官方 new-comment-on-post（属性名一致），文案按帖子口径。
+# 官方只给核心 Post / SinglePage 发新评论通知，BBS 帖子的评论通知由本插件补位。
+# 楼中楼回复仍走官方 someone-replied-to-you（评论主体链接已转绝对）。
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
+  name: bbs-new-comment-on-post
+  annotations:
+    rbac.authorization.halo.run/ui-permissions: |
+      [ "plugin:bbs:uc" ]
+spec:
+  displayName: "我的帖子收到新评论"
+  description: "如果有其他用户在你的帖子下方留下了新的评论，你将会收到一条通知，告诉你有新的评论。"
+  properties:
+    - name: postName
+      type: string
+      description: "The name of the post."
+    - name: postOwner
+      type: string
+      description: "The user name of the post owner."
+    - name: postTitle
+      type: string
+    - name: postUrl
+      type: string
+    - name: commenter
+      type: string
+      description: "The display name of the commenter."
+    - name: commentName
+      type: string
+      description: "The name of the comment."
+    - name: content
+      type: string
+      description: "The content of the comment."
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
+  name: template-bbs-new-comment-on-post
+spec:
+  reasonSelector:
+    reasonType: bbs-new-comment-on-post
+    language: default
+  template:
+    title: "[(${commenter})] 评论了你的帖子《[(${postTitle})]》"
+    rawBody: |
+      [(${subscriber.displayName})] 你好：
+
+        [(${commenter})] 评论了你的帖子 《[(${postTitle})]》，以下是评论的具体内容：
+
+        [(${content})]
+    htmlBody: |
+      <div class="notification-content">
+        <div class="head">
+          <p class="honorific" th:text="|${subscriber.displayName} 你好：|"></p>
+        </div>
+        <div class="body">
+          <p>
+            <span th:text="${commenter}"></span> 评论了你的帖子
+            <a th:href="${postUrl}" target="_blank" th:text="|《${postTitle}》|"></a>
+            <span>，以下是评论的具体内容：</span>
+          </p>
+          <div class="content" th:utext="${content}"></div>
+        </div>
+        <div></div>
+      </div>

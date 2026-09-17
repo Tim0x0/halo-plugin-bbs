@@ -848,24 +848,29 @@ public class BbsPostService {
         return mutate(name, post -> post.getSpec().setLocked(false));
     }
 
-    /** 标记 / 取消已解决（管理端）：仅问答帖可操作。 */
+    /** 标记 / 取消已解决（管理端）：仅问答帖可操作。取消时清掉最佳答案。 */
     public Mono<BbsPost> setSolved(String name, boolean solved) {
-        return mutate(name, post -> {
-            requireQuestion(post);
-            post.getSpec().setSolved(solved);
-        });
+        return mutate(name, post -> applySolved(post, solved));
     }
 
-    /** 标记 / 取消已解决（UC，发帖人操作）：越权 403；锁定帖不可操作。 */
+    /** 标记 / 取消已解决（UC，发帖人操作）：越权 403；锁定帖不可操作。取消时清掉最佳答案。 */
     public Mono<BbsPost> setSolvedOwned(String name, String owner, boolean solved) {
         return mutateOwned(name, owner, post -> {
-            requireQuestion(post);
             if (Boolean.TRUE.equals(post.getSpec().getLocked())) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                         "帖子已被锁定，无法操作");
             }
-            post.getSpec().setSolved(solved);
+            applySolved(post, solved);
         });
+    }
+
+    private static void applySolved(BbsPost post, boolean solved) {
+        requireQuestion(post);
+        post.getSpec().setSolved(solved);
+        // 未解决不能再挂最佳答案：否则详情页「该问题已解决」没了，中间那条最佳答案楼层还在。
+        if (!solved) {
+            post.getSpec().setBestAnswerCommentName(null);
+        }
     }
 
     private static void requireQuestion(BbsPost post) {
@@ -873,6 +878,83 @@ public class BbsPostService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "仅问答帖可标记已解决");
         }
+    }
+
+    /**
+     * 把某条顶层评论标为最佳答案（{@code commentName} 空则取消）。
+     * 作者或管辖该分类的版主可操作；锁定帖作者不可改，版主可以。
+     * 设上时同步已解决；取消最佳答案不自动取消已解决。
+     */
+    public Mono<BbsPost> setBestAnswer(String postName, String commentName, String actor) {
+        var target = StringUtils.trimToNull(commentName);
+        return currentUsernameOr(actor).flatMap(user ->
+                client.fetch(BbsPost.class, postName)
+                        .switchIfEmpty(Mono.error(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND, "帖子不存在")))
+                        .flatMap(post -> requireBestAnswerPermission(post, user)
+                                .then(verifyBestAnswerComment(postName, target))
+                                .then(updateWithRetry(postName, latest -> {
+                                    requireQuestion(latest);
+                                    if (Boolean.TRUE.equals(latest.getSpec().getDeleted())
+                                            || latest.getMetadata()
+                                            .getDeletionTimestamp() != null) {
+                                        return Mono.error(new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST, "帖子在回收站中，不能操作"));
+                                    }
+                                    boolean owner = Objects.equals(
+                                            latest.getSpec().getOwner(), user);
+                                    if (owner && Boolean.TRUE.equals(
+                                            latest.getSpec().getLocked())) {
+                                        return Mono.error(new ResponseStatusException(
+                                                HttpStatus.FORBIDDEN, "帖子已被锁定，无法操作"));
+                                    }
+                                    latest.getSpec().setBestAnswerCommentName(target);
+                                    if (target != null) {
+                                        latest.getSpec().setSolved(true);
+                                    }
+                                    return Mono.just(latest);
+                                }))));
+    }
+
+    private Mono<String> currentUsernameOr(String actor) {
+        if (StringUtils.isNotBlank(actor)) {
+            return Mono.just(actor);
+        }
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .filter(StringUtils::isNotBlank)
+                .switchIfEmpty(Mono.error(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "未登录")));
+    }
+
+    private Mono<Void> requireBestAnswerPermission(BbsPost post, String actor) {
+        if (Objects.equals(post.getSpec().getOwner(), actor)) {
+            return Mono.empty();
+        }
+        return moderationScope.resolve(actor)
+                .filter(scope -> scope.covers(post.getSpec().getCategoryName()))
+                .switchIfEmpty(Mono.error(() -> new ResponseStatusException(
+                        HttpStatus.FORBIDDEN, "无权设置最佳答案")))
+                .then();
+    }
+
+    private Mono<Void> verifyBestAnswerComment(String postName, String commentName) {
+        if (commentName == null) {
+            return Mono.empty();
+        }
+        return client.fetch(run.halo.app.core.extension.content.Comment.class, commentName)
+                .filter(comment -> comment.getSpec() != null
+                        && comment.getSpec().getSubjectRef() != null
+                        && "bbs.timxs.com".equals(comment.getSpec().getSubjectRef().getGroup())
+                        && "BbsPost".equals(comment.getSpec().getSubjectRef().getKind())
+                        && postName.equals(comment.getSpec().getSubjectRef().getName())
+                        && Boolean.TRUE.equals(comment.getSpec().getApproved())
+                        && !Boolean.TRUE.equals(comment.getSpec().getHidden())
+                        && comment.getMetadata().getDeletionTimestamp() == null)
+                .switchIfEmpty(Mono.error(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "评论不存在或不属于该帖")))
+                .then();
     }
 
     /** 管理端移入回收站：显式走版主管辖。 */
@@ -1296,6 +1378,7 @@ public class BbsPostService {
         // 放在服务层：PUT 与 CRUD patch 两条写入路径才会行为一致。
         if (type != BbsPost.PostType.QUESTION) {
             spec.setSolved(false);
+            spec.setBestAnswerCommentName(null);
         }
         if (managed) {
             applyManagedFields(spec, request);
@@ -1368,6 +1451,7 @@ public class BbsPostService {
         }
         if (spec.getType() != BbsPost.PostType.QUESTION) {
             spec.setSolved(false);
+            spec.setBestAnswerCommentName(null);
         }
         spec.setDraft(null);
     }

@@ -65,6 +65,8 @@ export interface BbsPostSpec {
   locked?: boolean
   /** 问答帖是否已解决（仅 QUESTION 有意义） */
   solved?: boolean
+  /** 最佳答案评论名（仅问答帖） */
+  bestAnswerCommentName?: string
   phase: PostPhase
   /** 帖子或已发布修改稿被驳回时的原因 */
   rejectReason?: string
@@ -160,16 +162,21 @@ export interface BbsCommentAdminVo {
   name: string
   owner?: BbsCommentAdminOwner
   content?: string
+  /** 仅 Console 审核面；UC 不下发 */
   approved?: boolean
+  /** 仅 Console 审核面；UC 不下发 */
   hidden?: boolean
   top?: boolean
   priority?: number
   creationTime?: string
+  /** 仅 Console 审核面；UC 不下发 */
   approvedTime?: string
-  /** 回复总数（含未审核与隐藏） */
+  /** 回复数。Console 含待审 / 隐藏；UC 只计公开可见 */
   replyCount?: number
   deleting?: boolean
+  /** 仅 Console 审核面；UC 不下发 */
   ipAddress?: string
+  /** 仅 Console 审核面；UC 不下发 */
   userAgent?: string
 }
 
@@ -178,9 +185,12 @@ export interface BbsReplyAdminVo {
   name: string
   owner?: BbsCommentAdminOwner
   content?: string
+  /** 仅 Console 审核面；UC 不下发 */
   approved?: boolean
+  /** 仅 Console 审核面；UC 不下发 */
   hidden?: boolean
   creationTime?: string
+  /** 仅 Console 审核面；UC 不下发 */
   approvedTime?: string
   deleting?: boolean
   commentName?: string
@@ -295,6 +305,8 @@ export interface BbsPostVo {
   locked?: boolean
   /** 问答帖是否已解决 */
   solved?: boolean
+  /** 最佳答案评论名（仅问答帖） */
+  bestAnswerCommentName?: string
   /** 是否「已编辑」：发布后正文有改动（服务端派生，前台同口径；未发布的工作稿改动不算） */
   edited?: boolean
   /** 当前未发布稿或已发布修改稿的驳回原因 */

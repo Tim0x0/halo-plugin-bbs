@@ -34,6 +34,7 @@ import {
   type PostFormState,
 } from '@/types/bbs'
 import PostSettingModal from '@/console/components/PostSettingModal.vue'
+import PostCommentListModal from '@/console/components/PostCommentListModal.vue'
 import CategoryFilterDropdown from '@/console/components/CategoryFilterDropdown.vue'
 import PostEntityStart from '@/shared/PostEntityStart.vue'
 import PostStatusEnd from '@/shared/PostStatusEnd.vue'
@@ -236,6 +237,7 @@ const settingPrimaryLabel = computed(() =>
 // —— 提交附言弹窗：与驳回弹窗同范式，附言可选；确认后跑真正的提交续体 ——
 const noteVisible = ref(false)
 const noteSaving = ref(false)
+const commentsPost = ref<BbsPostVo>()
 let noteContinuation: ((note: string) => Promise<void>) | null = null
 
 function askSubmitNote(continuation: (note: string) => Promise<void>) {
@@ -448,7 +450,11 @@ onMounted(() => {
               />
             </template>
             <template #end>
-              <PostCommentsField :count="post.commentsCount" />
+              <PostCommentsField
+                :count="post.commentsCount"
+                clickable
+                @open="commentsPost = post"
+              />
               <PostLockField :post="post" readonly />
               <PostStatusEnd :post="post" />
               <VEntityField width="7rem">
@@ -547,6 +553,13 @@ onMounted(() => {
     :post-name="moderationName"
     mode="uc"
     @close="moderationName = ''"
+  />
+
+  <PostCommentListModal
+    v-if="commentsPost"
+    :post="commentsPost"
+    mode="uc"
+    @close="commentsPost = undefined"
   />
 </template>
 

@@ -29,7 +29,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-bbs-theme="light"]) {
     --b-bg: #17191d;
     --b-line: #2a2e35;
     --b-hover: #22262c;
@@ -39,6 +39,22 @@
     --b-text-3: #666e79;
     --b-amber: #d9a52a;
   }
+}
+
+html[data-bbs-theme="dark"] {
+  --b-bg: #17191d;
+  --b-line: #2a2e35;
+  --b-hover: #22262c;
+  --b-sunken: #1c2025;
+  --b-text: #eceef1;
+  --b-text-2: #a8b0ba;
+  --b-text-3: #666e79;
+  --b-amber: #d9a52a;
+  color-scheme: dark;
+}
+
+html[data-bbs-theme="light"] {
+  color-scheme: light;
 }
 
 * {
@@ -508,6 +524,32 @@ button {
 
 .bbs-me__login:hover {
   background: color-mix(in srgb, var(--b-accent) 82%, #000);
+}
+
+.bbs-theme__btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin-left: 2px;
+  border-radius: 50%;
+  color: var(--b-text-2);
+}
+
+.bbs-theme__btn:hover {
+  color: var(--b-text);
+  background: var(--b-hover);
+}
+
+.bbs-theme__btn svg {
+  grid-area: 1 / 1;
+  width: 18px;
+  height: 18px;
+}
+
+.bbs-theme__btn svg[hidden] {
+  display: none !important;
 }
 
 /* ---------------- Hero（品牌色 / 图片 Banner） ---------------- */
@@ -1368,6 +1410,16 @@ a.bbs-stag:hover {
   height: 15px;
 }
 
+.bbs-phero .bbs-sic {
+  width: 24px;
+  height: 24px;
+}
+
+.bbs-phero .bbs-sic svg {
+  width: 19px;
+  height: 19px;
+}
+
 /* 标题：锁在左，vertical-align:middle 贴第一行 */
 .bbs-phero__title {
   margin: 0;
@@ -2052,6 +2104,16 @@ a.bbs-post__name:hover {
     height: 18px;
   }
 
+  .bbs-phero .bbs-sic {
+    width: 22px;
+    height: 22px;
+  }
+
+  .bbs-phero .bbs-sic svg {
+    width: 17px;
+    height: 17px;
+  }
+
   /* 帖子页 */
   .bbs-phero {
     padding: 20px 16px 24px;
@@ -2473,6 +2535,52 @@ a.bbs-flr__name:hover {
 a.bbs-flr__no:hover {
   opacity: 1;
   color: var(--b-accent);
+}
+
+.bbs-flr.is-best {
+  position: relative;
+}
+
+.bbs-best {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  flex: none;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--b-green);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.bbs-flr.is-best .bbs-best {
+  display: inline-flex;
+}
+
+.bbs-best svg {
+  width: 11px;
+  height: 11px;
+}
+
+.bbs-flr.is-best::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: -12px;
+  right: -12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--b-green) 14%, transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bbs-flr.is-best > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* 置顶圆标沿用 §2.1 bic 语言（实底主题色圆 + 图钉），比列表小一号。

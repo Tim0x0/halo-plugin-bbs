@@ -107,43 +107,34 @@ export const consoleApi = {
   deleteComment(name: string, commentName: string) {
     return axiosInstance.delete(`${CONSOLE_BASE}/bbsposts/${name}/comments/${commentName}`)
   },
-  listCommentReplies(
-    name: string,
-    commentName: string,
-    params: { page?: number; size?: number }
-  ) {
+  listCommentReplies(commentName: string, params: { page?: number; size?: number }) {
     return axiosInstance.get<ListResult<BbsReplyAdminVo>>(
-      `${CONSOLE_BASE}/bbsposts/${name}/comments/${commentName}/replies`,
+      `${CONSOLE_BASE}/comments/${commentName}/replies`,
       { params }
     )
   },
   /** 通过该评论下全部未审核回复 */
-  approveUnreviewedReplies(name: string, commentName: string) {
+  approveUnreviewedReplies(commentName: string) {
     return axiosInstance.put<{ approvedCount: number }>(
-      `${CONSOLE_BASE}/bbsposts/${name}/comments/${commentName}/replies/approve-unreviewed`
+      `${CONSOLE_BASE}/comments/${commentName}/replies/approve-unreviewed`
     )
   },
-  approveReply(name: string, commentName: string, replyName: string) {
+  approveReply(commentName: string, replyName: string) {
     return axiosInstance.put(
-      `${CONSOLE_BASE}/bbsposts/${name}/comments/${commentName}/replies/${replyName}/approve`
+      `${CONSOLE_BASE}/comments/${commentName}/replies/${replyName}/approve`
     )
   },
-  unapproveReply(name: string, commentName: string, replyName: string) {
+  unapproveReply(commentName: string, replyName: string) {
     return axiosInstance.put(
-      `${CONSOLE_BASE}/bbsposts/${name}/comments/${commentName}/replies/${replyName}/unapprove`
+      `${CONSOLE_BASE}/comments/${commentName}/replies/${replyName}/unapprove`
     )
   },
-  deleteReply(name: string, commentName: string, replyName: string) {
-    return axiosInstance.delete(
-      `${CONSOLE_BASE}/bbsposts/${name}/comments/${commentName}/replies/${replyName}`
-    )
+  deleteReply(commentName: string, replyName: string) {
+    return axiosInstance.delete(`${CONSOLE_BASE}/comments/${commentName}/replies/${replyName}`)
   },
   /** 版主以当前用户身份回复（直接通过） */
-  createReply(name: string, commentName: string, body: { raw: string; quoteReply?: string }) {
-    return axiosInstance.post(
-      `${CONSOLE_BASE}/bbsposts/${name}/comments/${commentName}/replies`,
-      body
-    )
+  createReply(commentName: string, body: { raw: string; quoteReply?: string }) {
+    return axiosInstance.post(`${CONSOLE_BASE}/comments/${commentName}/replies`, body)
   },
   createPost(body: PostRequest, publish: boolean) {
     return axiosInstance.post<BbsPost>(`${CONSOLE_BASE}/bbsposts`, body, {
@@ -182,6 +173,11 @@ export const consoleApi = {
   },
   solvePost(name: string) {
     return axiosInstance.put(`${CONSOLE_BASE}/bbsposts/${name}/solve`)
+  },
+  setBestAnswer(name: string, commentName?: string | null) {
+    return axiosInstance.put<BbsPost>(`${CONSOLE_BASE}/bbsposts/${name}/best-answer`, {
+      commentName: commentName || null,
+    })
   },
   unsolvePost(name: string) {
     return axiosInstance.put(`${CONSOLE_BASE}/bbsposts/${name}/unsolve`)
@@ -271,6 +267,35 @@ export const ucApi = {
   },
   unsolve(name: string) {
     return axiosInstance.put(`${UC_BASE}/bbsposts/${name}/unsolve`)
+  },
+  setBestAnswer(name: string, commentName?: string | null) {
+    return axiosInstance.put<BbsPost>(`${UC_BASE}/bbsposts/${name}/best-answer`, {
+      commentName: commentName || null,
+    })
+  },
+  listPostComments(
+    name: string,
+    params?: {
+      page?: number
+      size?: number
+      approved?: string
+      keyword?: string
+      owner?: string
+      sort?: string
+    }
+  ) {
+    // UC 只列公开可见（已通过且未隐藏）；approved 参数服务端忽略，这里也不传。
+    const { approved: _approved, ...rest } = params || {}
+    return axiosInstance.get<ListResult<BbsCommentAdminVo>>(
+      `${UC_BASE}/bbsposts/${name}/comments`,
+      { params: rest }
+    )
+  },
+  listCommentReplies(commentName: string, params: { page?: number; size?: number }) {
+    return axiosInstance.get<ListResult<BbsReplyAdminVo>>(
+      `${UC_BASE}/comments/${commentName}/replies`,
+      { params }
+    )
   },
   delete(name: string) {
     return axiosInstance.delete(`${UC_BASE}/bbsposts/${name}`)

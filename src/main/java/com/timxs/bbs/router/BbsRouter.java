@@ -15,6 +15,7 @@ import com.timxs.bbs.util.BbsTimeFormats;
 import com.timxs.bbs.vo.BbsPostVo;
 import com.timxs.bbs.vo.CategoryVo;
 import com.timxs.bbs.vo.OwnerVo;
+import com.timxs.bbs.vo.RoCommentVo;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -240,9 +241,13 @@ public class BbsRouter {
                         return hasAdminPermission(me != null ? me.getName() : null)
                                 .flatMap(hasAdmin -> {
                                     model.put("hasAdminPermission", hasAdmin);
-                                    return templateNameResolver
-                                            .resolveTemplateNameOrDefault(request.exchange(), "bbs_post")
-                                            .flatMap(template -> ServerResponse.ok().render(template, model));
+                                    return loadBestAnswer(post)
+                                            .doOnNext(best -> model.put("bestAnswer", best))
+                                            .then(templateNameResolver
+                                                    .resolveTemplateNameOrDefault(
+                                                            request.exchange(), "bbs_post")
+                                                    .flatMap(template -> ServerResponse.ok()
+                                                            .render(template, model)));
                                 });
                     })
                     .switchIfEmpty(Mono.error(new ResponseStatusException(
@@ -306,10 +311,20 @@ public class BbsRouter {
         model.put(ModelConst.TEMPLATE_ID, "bbs_post");
         return hasAdminPermission(me.getName()).flatMap(hasAdmin -> {
             model.put("hasAdminPermission", hasAdmin);
-            return templateNameResolver
-                    .resolveTemplateNameOrDefault(request.exchange(), "bbs_post")
-                    .flatMap(template -> ServerResponse.ok().render(template, model));
+            return loadBestAnswer(post)
+                    .doOnNext(best -> model.put("bestAnswer", best))
+                    .then(templateNameResolver
+                            .resolveTemplateNameOrDefault(request.exchange(), "bbs_post")
+                            .flatMap(template -> ServerResponse.ok().render(template, model)));
         });
+    }
+
+    private Mono<RoCommentVo> loadBestAnswer(BbsPostVo post) {
+        if (post == null || !"QUESTION".equals(post.getType())
+                || StringUtils.isBlank(post.getBestAnswerCommentName())) {
+            return Mono.empty();
+        }
+        return bbsQueryService.getBestAnswer(post.getName(), post.getBestAnswerCommentName());
     }
 
     /**

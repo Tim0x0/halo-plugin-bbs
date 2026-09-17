@@ -22,27 +22,52 @@ import {
 } from '@halo-dev/components'
 import { utils } from '@halo-dev/ui-shared'
 import DOMPurify from 'dompurify'
-import { consoleApi } from '@/api/bbs'
+import { consoleApi, ucApi } from '@/api/bbs'
 import { formatTime, timeAgo } from '@/utils/date'
-import type { BbsCommentAdminVo, BbsReplyAdminVo } from '@/types/bbs'
+import type { BbsCommentAdminVo, BbsPostVo, BbsReplyAdminVo } from '@/types/bbs'
 import UserFilterDropdown from './UserFilterDropdown.vue'
 
 /**
  * 帖子评论管理弹窗：列表评论列点击后的唯一入口。
  *
- * 交互逐项对齐官方评论管理（SubjectQueryCommentList + CommentListItem）：
- * 筛选（审核状态 / 作者 / 排序 / 关键词）+ 行内通过 / 取消通过 / 删除 /
- * 通过全部回复 + 展开楼中楼逐条管理 + 版主回复。数据走 BBS 作用域端点
- * （服务端强制 subjectRef 归属），界面与操作语义与官方一致。
+ * Console：筛选（含待审）+ 行内通过 / 取消通过 / 删除 / 楼中楼管理 + 版主回复。
+ * UC：只看公开可见评论 / 回复（已通过且未隐藏，作者无审核权）；
+ * 问答帖可设 / 取消最佳答案（锁定后作者不可改）。
  */
-const props = defineProps<{
-  postName: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    post: BbsPostVo
+    mode?: 'console' | 'uc'
+  }>(),
+  { mode: 'console' }
+)
 
 const emit = defineEmits<{ close: [] }>()
 
 const modal = ref<InstanceType<typeof VModal>>()
-const canModerate = utils.permission.has(['plugin:bbs:moderate'])
+const canModerate = computed(
+  () => props.mode !== 'uc' && utils.permission.has(['plugin:bbs:moderate'])
+)
+const isQuestion = computed(() => props.post.type === 'QUESTION')
+const canSetBest = computed(() => {
+  if (!isQuestion.value) {
+    return false
+  }
+  if (props.mode === 'uc') {
+    return !props.post.locked
+  }
+  return canModerate.value
+})
+const bestAnswerName = ref(props.post.bestAnswerCommentName || '')
+const commentsApi = computed(() => (props.mode === 'uc' ? ucApi : consoleApi))
+const isUc = computed(() => props.mode === 'uc')
+/** UC 已按公开口径过滤，不下发审核字段；缺省视为已通过、未隐藏。 */
+function isApproved(item: { approved?: boolean }) {
+  return isUc.value || item.approved === true
+}
+function isHidden(item: { hidden?: boolean }) {
+  return !isUc.value && item.hidden === true
+}
 
 // —— 筛选与分页（弹窗内状态，不挂 URL）——
 const loading = ref(true)
@@ -69,7 +94,7 @@ const sortItems = [
 ]
 
 const hasFilters = computed(
-  () => approved.value !== undefined || !!sort.value || !!owner.value
+  () => (!isUc.value && approved.value !== undefined) || !!sort.value || !!owner.value
 )
 
 function resetFilters() {
@@ -88,11 +113,11 @@ async function fetchComments(silent = false) {
     loading.value = true
   }
   try {
-    const { data } = await consoleApi.listPostComments(props.postName, {
+    const { data } = await commentsApi.value.listPostComments(props.post.name, {
       page: page.value,
       size: size.value,
       keyword: keywordDebounced.value.trim() || undefined,
-      approved: approved.value,
+      approved: isUc.value ? undefined : approved.value,
       owner: owner.value,
       sort: sort.value,
     })
@@ -156,7 +181,7 @@ async function loadReplies(commentName: string) {
   const state = expanded[commentName]
   state.loading = true
   try {
-    const { data } = await consoleApi.listCommentReplies(props.postName, commentName, {
+    const { data } = await commentsApi.value.listCommentReplies(commentName, {
       page: 1,
       size: 100,
     })
@@ -197,14 +222,14 @@ async function act(task: () => Promise<unknown>, okText: string) {
 
 function onApprove(comment: BbsCommentAdminVo) {
   void act(
-    () => consoleApi.approveComment(props.postName, comment.name),
+    () => consoleApi.approveComment(props.post.name, comment.name),
     '已通过'
   )
 }
 
 function onUnapprove(comment: BbsCommentAdminVo) {
   void act(
-    () => consoleApi.unapproveComment(props.postName, comment.name),
+    () => consoleApi.unapproveComment(props.post.name, comment.name),
     '已取消通过'
   )
 }
@@ -216,7 +241,7 @@ function onDeleteComment(comment: BbsCommentAdminVo) {
     confirmType: 'danger',
     onConfirm: async () => {
       await act(
-        () => consoleApi.deleteComment(props.postName, comment.name),
+        () => consoleApi.deleteComment(props.post.name, comment.name),
         '删除成功'
       )
       delete expanded[comment.name]
@@ -230,10 +255,7 @@ function onApproveAllReplies(comment: BbsCommentAdminVo) {
     description: '将通过该评论下所有未审核的回复。',
     onConfirm: async () => {
       try {
-        const { data } = await consoleApi.approveUnreviewedReplies(
-          props.postName,
-          comment.name
-        )
+        const { data } = await consoleApi.approveUnreviewedReplies(comment.name)
         Toast.success(`已通过 ${data.approvedCount ?? 0} 条回复`)
         await Promise.all([fetchComments(true), Promise.resolve(refreshExpandedReplies())])
       } catch {
@@ -246,14 +268,14 @@ function onApproveAllReplies(comment: BbsCommentAdminVo) {
 // —— 回复操作 ——
 function onApproveReply(commentName: string, reply: BbsReplyAdminVo) {
   void act(
-    () => consoleApi.approveReply(props.postName, commentName, reply.name),
+    () => consoleApi.approveReply(commentName, reply.name),
     '已通过'
   )
 }
 
 function onUnapproveReply(commentName: string, reply: BbsReplyAdminVo) {
   void act(
-    () => consoleApi.unapproveReply(props.postName, commentName, reply.name),
+    () => consoleApi.unapproveReply(commentName, reply.name),
     '已取消通过'
   )
 }
@@ -265,11 +287,28 @@ function onDeleteReply(commentName: string, reply: BbsReplyAdminVo) {
     confirmType: 'danger',
     onConfirm: async () => {
       await act(
-        () => consoleApi.deleteReply(props.postName, commentName, reply.name),
+        () => consoleApi.deleteReply(commentName, reply.name),
         '删除成功'
       )
     },
   })
+}
+
+async function onSetBest(comment: BbsCommentAdminVo) {
+  if (!canSetBest.value || !isApproved(comment) || isHidden(comment)) {
+    return
+  }
+  const clearing = bestAnswerName.value === comment.name
+  try {
+    await commentsApi.value.setBestAnswer(
+      props.post.name,
+      clearing ? null : comment.name
+    )
+    bestAnswerName.value = clearing ? '' : comment.name
+    Toast.success(clearing ? '已取消最佳答案' : '已设为最佳答案')
+  } catch (error) {
+    console.error('[bbs] 设置最佳答案失败', error)
+  }
 }
 
 // —— 版主回复（弹窗内再开弹窗，统一 mount-to-body）——
@@ -290,7 +329,7 @@ async function submitReply() {
   }
   replySaving.value = true
   try {
-    await consoleApi.createReply(props.postName, target.name, {
+    await consoleApi.createReply(target.name, {
       raw: replyRaw.value.trim(),
     })
     Toast.success('已回复')
@@ -340,7 +379,12 @@ onBeforeUnmount(() => {
       <SearchInput v-model="keyword" class="comment-toolbar__search" />
       <VSpace spacing="lg" class="comment-toolbar__filters">
         <FilterCleanButton v-if="hasFilters" @click="resetFilters" />
-        <FilterDropdown v-model="approved" label="状态" :items="approvedItems" />
+        <FilterDropdown
+          v-if="!isUc"
+          v-model="approved"
+          label="状态"
+          :items="approvedItems"
+        />
         <UserFilterDropdown
           v-if="utils.permission.has(['system:users:view'])"
           v-model="owner"
@@ -382,8 +426,9 @@ onBeforeUnmount(() => {
                       <span class="comment-item__author">
                         {{ comment.owner?.displayName || '匿名' }}
                       </span>
-                      <VTag v-if="comment.hidden">私密</VTag>
+                      <VTag v-if="isHidden(comment)">私密</VTag>
                       <VTag v-if="comment.top">置顶</VTag>
+                      <VTag v-if="bestAnswerName === comment.name" theme="primary">最佳答案</VTag>
                     </div>
                     <div class="comment-item__content" v-html="sanitize(comment.content)" />
                     <div class="comment-item__foot">
@@ -403,7 +448,7 @@ onBeforeUnmount(() => {
               </VEntityField>
             </template>
             <template #end>
-              <VEntityField v-if="!comment.approved">
+              <VEntityField v-if="!isApproved(comment)">
                 <template #description>
                   <VStatusDot state="warning" animate text="待审核" />
                 </template>
@@ -424,19 +469,28 @@ onBeforeUnmount(() => {
                 </template>
               </VEntityField>
             </template>
-            <template v-if="canModerate" #dropdownItems>
-              <VDropdownItem v-if="!comment.approved" @click="onApprove(comment)">
-                通过
+            <template v-if="canModerate || canSetBest" #dropdownItems>
+              <VDropdownItem
+                v-if="canSetBest && isApproved(comment) && !isHidden(comment)"
+                @click="onSetBest(comment)"
+              >
+                {{ bestAnswerName === comment.name ? '取消最佳答案' : '设为最佳答案' }}
               </VDropdownItem>
-              <VDropdownItem @click="onApproveAllReplies(comment)">通过全部回复</VDropdownItem>
-              <VDropdownDivider />
-              <VDropdownItem v-if="comment.approved" type="danger" @click="onUnapprove(comment)">
-                取消通过
-              </VDropdownItem>
-              <VDropdownItem type="danger" @click="onDeleteComment(comment)">删除</VDropdownItem>
+              <template v-if="canModerate">
+                <VDropdownDivider v-if="canSetBest && isApproved(comment) && !isHidden(comment)" />
+                <VDropdownItem v-if="!isApproved(comment)" @click="onApprove(comment)">
+                  通过
+                </VDropdownItem>
+                <VDropdownItem @click="onApproveAllReplies(comment)">通过全部回复</VDropdownItem>
+                <VDropdownDivider />
+                <VDropdownItem v-if="isApproved(comment)" type="danger" @click="onUnapprove(comment)">
+                  取消通过
+                </VDropdownItem>
+                <VDropdownItem type="danger" @click="onDeleteComment(comment)">删除</VDropdownItem>
+              </template>
             </template>
 
-            <!-- 楼中楼（含未审核；逐条可审批 / 删除） -->
+            <!-- 楼中楼：Console 含未审核并可审批 / 删除；UC 仅已通过 -->
             <template v-if="isExpanded(comment.name)" #footer>
               <div class="reply-block">
                 <VLoading v-if="expanded[comment.name].loading" />
@@ -465,7 +519,7 @@ onBeforeUnmount(() => {
                                 <span class="comment-item__author">
                                   {{ reply.owner?.displayName || '匿名' }}
                                 </span>
-                                <VTag v-if="reply.hidden">私密</VTag>
+                                <VTag v-if="isHidden(reply)">私密</VTag>
                               </div>
                               <div
                                 class="comment-item__content"
@@ -476,7 +530,7 @@ onBeforeUnmount(() => {
                         </VEntityField>
                       </template>
                       <template #end>
-                        <VEntityField v-if="!reply.approved">
+                        <VEntityField v-if="!isApproved(reply)">
                           <template #description>
                             <VStatusDot state="warning" animate text="待审核" />
                           </template>
@@ -499,7 +553,7 @@ onBeforeUnmount(() => {
                       </template>
                       <template v-if="canModerate" #dropdownItems>
                         <VDropdownItem
-                          v-if="!reply.approved"
+                          v-if="!isApproved(reply)"
                           @click="onApproveReply(comment.name, reply)"
                         >
                           通过

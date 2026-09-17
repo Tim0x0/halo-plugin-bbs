@@ -8,6 +8,7 @@ import static run.halo.app.extension.index.query.Queries.isNull;
 import static run.halo.app.extension.index.query.Queries.not;
 import static run.halo.app.extension.index.query.Queries.or;
 
+import com.timxs.bbs.comment.BbsFloorNumbers;
 import com.timxs.bbs.extension.BbsCategory;
 import com.timxs.bbs.extension.BbsPost;
 import com.timxs.bbs.service.BbsPostContentService;
@@ -624,6 +625,27 @@ public class BbsQueryService {
                 .defaultIfEmpty(ListResult.emptyResult());
     }
 
+    /**
+     * 前台最佳答案：必须是本帖已通过、未隐藏的顶层评论。失效指针当没设。
+     */
+    public Mono<RoCommentVo> getBestAnswer(String postName, String commentName) {
+        if (StringUtils.isBlank(postName) || StringUtils.isBlank(commentName)) {
+            return Mono.empty();
+        }
+        return requirePublicPost(postName)
+                .flatMap(ignored -> client.fetch(Comment.class, commentName))
+                .filter(comment -> comment.getSpec() != null
+                        && comment.getSpec().getSubjectRef() != null
+                        && POST_GVK.group().equals(comment.getSpec().getSubjectRef().getGroup())
+                        && POST_GVK.kind().equals(comment.getSpec().getSubjectRef().getKind())
+                        && postName.equals(comment.getSpec().getSubjectRef().getName())
+                        && Boolean.TRUE.equals(comment.getSpec().getApproved())
+                        && !Boolean.TRUE.equals(comment.getSpec().getHidden())
+                        && comment.getMetadata().getDeletionTimestamp() == null)
+                .flatMap(comment -> assembleRoComments(List.of(comment), Map.of())
+                        .flatMap(list -> list.isEmpty() ? Mono.empty() : Mono.just(list.get(0))));
+    }
+
     private Mono<ListResult<RoCommentVo>> doListRoComments(String postName, int page, int size,
             int replySize) {
         var options = ListOptions.builder()
@@ -756,6 +778,10 @@ public class BbsQueryService {
                                 c.getSpec().getTop(), c.getSpec().getPriority(),
                                 visibleReplyCount(c),
                                 "comments.content.halo.run/" + c.getMetadata().getName(), ctx);
+                        int floor = BbsFloorNumbers.read(c);
+                        if (floor >= BbsFloorNumbers.FIRST_COMMENT_FLOOR) {
+                            vo.setFloor(floor);
+                        }
                         var replies = previews.getOrDefault(c.getMetadata().getName(), List.of());
                         if (!replies.isEmpty()) {
                             vo.setReplies(replies.stream().map(r -> buildReplyVo(r, ctx)).toList());
@@ -1175,6 +1201,7 @@ public class BbsQueryService {
                 .pinPriority(spec.getPinPriority() == null ? 0 : spec.getPinPriority())
                 .locked(Boolean.TRUE.equals(spec.getLocked()))
                 .solved(Boolean.TRUE.equals(spec.getSolved()))
+                .bestAnswerCommentName(StringUtils.trimToNull(spec.getBestAnswerCommentName()))
                 .rejectReason(draft == null ? spec.getRejectReason() : draft.getRejectReason())
                 .commentsCount(safeCount(post, BbsPost.Status::getCommentsCount))
                 .totalCommentCount(safeCount(post, BbsPost.Status::getTotalCommentCount))

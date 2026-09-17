@@ -21,6 +21,7 @@ import com.timxs.bbs.service.BbsCategoryService;
 import com.timxs.bbs.service.BbsCommentAdminService;
 import com.timxs.bbs.service.BbsModerationScope;
 import com.timxs.bbs.service.BbsPostService;
+import com.timxs.bbs.service.BestAnswerParam;
 import com.timxs.bbs.service.ContentUpdateParam;
 import com.timxs.bbs.service.PostRequest;
 import com.timxs.bbs.service.ReplyCreateParam;
@@ -172,40 +173,41 @@ public class BbsConsoleEndpoint implements CustomEndpoint {
                         builder -> builder.operationId("DeleteBbsPostComment").tag(TAG)
                                 .description("删除评论（级联删回复）")
                                 .parameter(nameParam()).parameter(commentNameParam()))
-                .GET("/bbsposts/{name}/comments/{commentName}/replies", this::listCommentReplies,
+                .GET("/comments/{commentName}/replies", this::listCommentReplies,
                         builder -> builder.operationId("ListBbsPostCommentReplies").tag(TAG)
-                                .description("评论的回复管理列表（含未审核与隐藏）")
-                                .parameter(nameParam()).parameter(commentNameParam())
+                                .description("评论的回复管理列表（含未审核与隐藏；"
+                                        + "评论须属于管辖范围内的社区帖）")
+                                .parameter(commentNameParam())
                                 .parameter(pageParam()).parameter(sizeParam())
                                 .response(responseBuilder().implementation(
                                         ListResult.generateGenericClass(BbsReplyAdminVo.class))))
-                .PUT("/bbsposts/{name}/comments/{commentName}/replies/approve-unreviewed",
+                .PUT("/comments/{commentName}/replies/approve-unreviewed",
                         this::approveUnreviewedReplies,
                         builder -> builder.operationId("ApproveBbsPostCommentReplies").tag(TAG)
                                 .description("通过该评论下全部未审核回复")
-                                .parameter(nameParam()).parameter(commentNameParam()))
-                .PUT("/bbsposts/{name}/comments/{commentName}/replies/{replyName}/approve",
+                                .parameter(commentNameParam()))
+                .PUT("/comments/{commentName}/replies/{replyName}/approve",
                         this::approveReply,
                         builder -> builder.operationId("ApproveBbsPostReply").tag(TAG)
                                 .description("通过回复")
-                                .parameter(nameParam()).parameter(commentNameParam())
+                                .parameter(commentNameParam())
                                 .parameter(replyNameParam()))
-                .PUT("/bbsposts/{name}/comments/{commentName}/replies/{replyName}/unapprove",
+                .PUT("/comments/{commentName}/replies/{replyName}/unapprove",
                         this::unapproveReply,
                         builder -> builder.operationId("UnapproveBbsPostReply").tag(TAG)
                                 .description("取消通过回复")
-                                .parameter(nameParam()).parameter(commentNameParam())
+                                .parameter(commentNameParam())
                                 .parameter(replyNameParam()))
-                .DELETE("/bbsposts/{name}/comments/{commentName}/replies/{replyName}",
+                .DELETE("/comments/{commentName}/replies/{replyName}",
                         this::deleteReply,
                         builder -> builder.operationId("DeleteBbsPostReply").tag(TAG)
                                 .description("删除回复")
-                                .parameter(nameParam()).parameter(commentNameParam())
+                                .parameter(commentNameParam())
                                 .parameter(replyNameParam()))
-                .POST("/bbsposts/{name}/comments/{commentName}/replies", this::createReply,
+                .POST("/comments/{commentName}/replies", this::createReply,
                         builder -> builder.operationId("CreateBbsPostReply").tag(TAG)
                                 .description("版主以当前用户身份回复（直接通过；锁定 / 回收站帖禁止）")
-                                .parameter(nameParam()).parameter(commentNameParam())
+                                .parameter(commentNameParam())
                                 .requestBody(requestBodyBuilder().content(contentBuilder()
                                         .schema(schemaBuilder()
                                                 .implementation(ReplyCreateParam.class))))
@@ -265,7 +267,16 @@ public class BbsConsoleEndpoint implements CustomEndpoint {
                 .PUT("/bbsposts/{name}/unsolve",
                         req -> ok(postService.setSolved(req.pathVariable("name"), false)),
                         builder -> builder.operationId("UnsolveBbsPost").tag(TAG)
-                                .description("取消已解决（仅问答帖）").parameter(nameParam()))
+                                .description("取消已解决（仅问答帖；同步清掉最佳答案）")
+                                .parameter(nameParam()))
+                .PUT("/bbsposts/{name}/best-answer", this::setBestAnswer, builder -> builder
+                        .operationId("SetBbsPostBestAnswer").tag(TAG)
+                        .description("设 / 取消问答帖最佳答案（commentName 空=取消；锁定帖版主可改）")
+                        .parameter(nameParam())
+                        .requestBody(requestBodyBuilder().content(contentBuilder()
+                                .schema(schemaBuilder()
+                                        .implementation(BestAnswerParam.class))))
+                        .response(responseBuilder().implementation(BbsPost.class)))
                 .DELETE("/bbsposts/{name}",
                         req -> postService.recycleInScope(req.pathVariable("name"))
                                 .then(ServerResponse.ok().build()),
@@ -318,6 +329,17 @@ public class BbsConsoleEndpoint implements CustomEndpoint {
                         request.queryParam("deleted").map(Boolean::parseBoolean).orElse(false),
                         scoped))
                 .flatMap(result -> ServerResponse.ok().bodyValue(result));
+    }
+
+    private Mono<ServerResponse> setBestAnswer(ServerRequest request) {
+        return Mono.zip(request.bodyToMono(BestAnswerParam.class)
+                                .defaultIfEmpty(new BestAnswerParam(null)),
+                        currentUsername())
+                .flatMap(tuple -> postService.setBestAnswer(
+                        request.pathVariable("name"),
+                        tuple.getT1().commentName(),
+                        tuple.getT2()))
+                .flatMap(post -> ServerResponse.ok().bodyValue(post));
     }
 
     private Mono<ServerResponse> createPost(ServerRequest request) {
@@ -433,7 +455,6 @@ public class BbsConsoleEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> listCommentReplies(ServerRequest request) {
         return commentAdminService.listReplies(
-                        request.pathVariable("name"),
                         request.pathVariable("commentName"),
                         BbsPageRequests.page(request, 1),
                         BbsPageRequests.size(request, 20, BbsPageRequests.MAX_CONSOLE))
@@ -442,26 +463,26 @@ public class BbsConsoleEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> approveUnreviewedReplies(ServerRequest request) {
         return commentAdminService.approveUnreviewedReplies(
-                        request.pathVariable("name"), request.pathVariable("commentName"))
+                        request.pathVariable("commentName"))
                 .flatMap(count -> ServerResponse.ok()
                         .bodyValue(Map.of("approvedCount", count)));
     }
 
     private Mono<ServerResponse> approveReply(ServerRequest request) {
         return ok(commentAdminService.setReplyApproved(
-                request.pathVariable("name"), request.pathVariable("commentName"),
+                request.pathVariable("commentName"),
                 request.pathVariable("replyName"), true));
     }
 
     private Mono<ServerResponse> unapproveReply(ServerRequest request) {
         return ok(commentAdminService.setReplyApproved(
-                request.pathVariable("name"), request.pathVariable("commentName"),
+                request.pathVariable("commentName"),
                 request.pathVariable("replyName"), false));
     }
 
     private Mono<ServerResponse> deleteReply(ServerRequest request) {
         return commentAdminService.deleteReply(
-                        request.pathVariable("name"), request.pathVariable("commentName"),
+                        request.pathVariable("commentName"),
                         request.pathVariable("replyName"))
                 .then(ServerResponse.ok().build());
     }
@@ -472,7 +493,6 @@ public class BbsConsoleEndpoint implements CustomEndpoint {
                                 HttpStatus.BAD_REQUEST, "请提交回复内容"))),
                         currentUsername())
                 .flatMap(tuple -> commentAdminService.createReply(
-                        request.pathVariable("name"),
                         request.pathVariable("commentName"),
                         tuple.getT1().raw(), tuple.getT1().quoteReply(), tuple.getT2()))
                 .flatMap(reply -> ServerResponse.ok().bodyValue(reply));

@@ -24,8 +24,10 @@ public class BbsCommentAdminVo {
     /** HTML（Halo / 插件写入时已净化） */
     private String content;
 
+    /** 是否已通过。仅 Console 审核面下发；UC 不下发。 */
     private Boolean approved;
 
+    /** 是否隐藏。仅 Console 审核面下发；UC 不下发。 */
     private Boolean hidden;
 
     private Boolean top;
@@ -34,15 +36,18 @@ public class BbsCommentAdminVo {
 
     private Instant creationTime;
 
+    /** 通过时间。仅 Console 审核面下发；UC 不下发。 */
     private Instant approvedTime;
 
-    /** 回复总数（核心维护，含未审核与隐藏） */
+    /** 回复数。Console 用核心 status（含待审 / 隐藏）；UC 只计公开可见。 */
     private Integer replyCount;
 
     /** 删除中（已设删除时间戳、finalizer 未跑完） */
     private Boolean deleting;
 
+    /** 评论者 IP。仅 Console 审核面下发；UC 不下发。 */
     private String ipAddress;
 
+    /** 评论者 UA。仅 Console 审核面下发；UC 不下发。 */
     private String userAgent;
 }

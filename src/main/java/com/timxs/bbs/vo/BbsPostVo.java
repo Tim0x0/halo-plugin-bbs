@@ -73,6 +73,9 @@ public class BbsPostVo {
     /** 问答帖是否已解决（仅 QUESTION 有意义） */
     private Boolean solved;
 
+    /** 最佳答案评论名（仅问答帖；未指定时为 null） */
+    private String bestAnswerCommentName;
+
     /**
      * 是否「已编辑」：已发布版本的正文在发布后被改动过。
      *

@@ -3,6 +3,45 @@
 (function () {
   'use strict';
 
+  /* 明暗：auto 跟随系统，light / dark 手动锁定。顶栏按钮三图标轮换
+     （跟随系统 → 浅色 → 深色）。只切 BBS 自己的 --b-*，不改评论插件编辑器。
+     须在首屏样式前写 data-bbs-theme，见 bbs.html / bbs_post.html 内联兜底。 */
+  var THEME_KEY = 'bbs-theme';
+  var THEME_ORDER = ['auto', 'light', 'dark'];
+  var THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
+  var currentTheme = function () {
+    var saved = localStorage.getItem(THEME_KEY);
+    return saved === 'light' || saved === 'dark' ? saved : 'auto';
+  };
+  var applyTheme = function (mode) {
+    var root = document.documentElement;
+    if (mode === 'light' || mode === 'dark') {
+      root.setAttribute('data-bbs-theme', mode);
+    } else {
+      root.removeAttribute('data-bbs-theme');
+      mode = 'auto';
+    }
+    document.querySelectorAll('[data-bbs-theme-icon]').forEach(function (el) {
+      /* SVGElement 没有 hidden 这个 JS 属性，赋值只挂了个无效属性、[hidden]
+         选择器匹配不到——必须走 toggleAttribute 操作特性本身 */
+      el.toggleAttribute('hidden', el.getAttribute('data-bbs-theme-icon') !== mode);
+    });
+    document.querySelectorAll('[data-bbs-theme-cycle]').forEach(function (el) {
+      el.setAttribute('aria-label', '外观：' + (THEME_LABEL[mode] || '跟随系统'));
+      el.setAttribute('title', THEME_LABEL[mode] || '跟随系统');
+    });
+  };
+  applyTheme(currentTheme());
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-bbs-theme-cycle]');
+    if (!btn) return;
+    e.preventDefault();
+    var next = THEME_ORDER[(THEME_ORDER.indexOf(currentTheme()) + 1) % THEME_ORDER.length];
+    if (next === 'auto') localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  });
+
   /* 无头像字母占位：对齐 Halo（渲染层派生）+ Flarum stringToColor（色相算法）。
      种子 = 显示名 UTF-16 码元累加 % 360；HSV(h, 0.3, 0.9) 浅底白字。
      SSR 模板只写 data-bbs-letter=显示名，这里填字母与底色；只读评论 DOM 同样走此函数。 */
@@ -303,9 +342,8 @@
     var roOwner = roBox.getAttribute('data-owner-name') || '';
     var roAuthorTpl = roBox.getAttribute('data-author-link') || '';
     var roHip = roBox.getAttribute('data-hip') === 'true';
-    /* 楼层号：楼主占 1 楼，评论从 2 楼起。置顶楼不占号（钉替号，见 roItem），
-       故计数器只对非置顶自增，序号连续不留洞；跨页累加不重置 */
-    var roSeq = 2;
+    /* 楼层号只认后端冻号（楼主 1、评论从 2；待审占号、置顶不改号、删评不重排）。
+       尚未冻上则不画号，不按页序兜底。 */
 
     /* 头像：有 owner.name（User kind）走 hip-user-card > hip-user-avatar，
        与楼主帖同款（可点弹名片 + 拉装扮头像框）；未装 interaction-plus 时
@@ -494,16 +532,17 @@
           rc.appendChild(replyCountText);
           actions.appendChild(rc);
         }
-        if (vo.top !== true) {
-          var anchor = 'c-' + (vo.name || roSeq);
-          row.id = anchor;
+        if (vo.name) {
+          row.id = 'c-' + vo.name;
+        }
+        if (typeof vo.floor === 'number' && vo.floor >= 2) {
+          row.setAttribute('data-floor', String(vo.floor));
           var no = document.createElement('a');
           no.className = 'bbs-flr__no';
-          no.href = '#' + anchor;
-          no.textContent = '#' + roSeq;
-          no.title = '第 ' + roSeq + ' 楼';
+          no.href = '#c-' + (vo.name || vo.floor);
+          no.textContent = '#' + vo.floor;
+          no.title = '第 ' + vo.floor + ' 楼';
           actions.appendChild(no);
-          roSeq += 1;
         }
       }
 

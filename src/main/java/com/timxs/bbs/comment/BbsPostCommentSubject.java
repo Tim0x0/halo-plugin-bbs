@@ -10,6 +10,7 @@ import run.halo.app.content.comment.CommentSubject;
 import run.halo.app.extension.GroupVersionKind;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.extension.Ref;
+import run.halo.app.infra.ExternalLinkProcessor;
 
 /**
  * 把 BBS 帖子注册为 Halo 评论体系的评论主体：
@@ -24,9 +25,12 @@ public class BbsPostCommentSubject implements CommentSubject<BbsPost> {
     private static final GroupVersionKind GVK = GroupVersionKind.fromExtension(BbsPost.class);
 
     private final ReactiveExtensionClient client;
+    private final ExternalLinkProcessor externalLinkProcessor;
 
-    public BbsPostCommentSubject(ReactiveExtensionClient client) {
+    public BbsPostCommentSubject(ReactiveExtensionClient client,
+            ExternalLinkProcessor externalLinkProcessor) {
         this.client = client;
+        this.externalLinkProcessor = externalLinkProcessor;
     }
 
     @Override
@@ -36,9 +40,11 @@ public class BbsPostCommentSubject implements CommentSubject<BbsPost> {
 
     @Override
     public Mono<SubjectDisplay> getSubjectDisplay(String name) {
+        // 对齐官方 PostCommentSubject：链接经 ExternalLinkProcessor 转绝对，
+        // 否则官方「有人回复了我」邮件拿到相对路径无法跳转
         return get(name).map(post -> new SubjectDisplay(
                 post.getSpec().getTitle(),
-                BbsUrls.postPermalink(post.getSpec().getSlug()),
+                externalLinkProcessor.processLink(BbsUrls.postPermalink(post.getSpec().getSlug())),
                 "BBS 帖子"));
     }
 

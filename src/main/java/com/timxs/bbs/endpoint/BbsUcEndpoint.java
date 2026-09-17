@@ -1,5 +1,6 @@
 package com.timxs.bbs.endpoint;
 
+import static com.timxs.bbs.util.BbsEndpointParams.commentNameParam;
 import static com.timxs.bbs.util.BbsEndpointParams.currentUsername;
 import static com.timxs.bbs.util.BbsEndpointParams.nameParam;
 import static com.timxs.bbs.util.BbsEndpointParams.optionalSnapshotNameParam;
@@ -15,16 +16,20 @@ import static org.springdoc.core.fn.builders.schema.Builder.schemaBuilder;
 
 import com.timxs.bbs.extension.BbsPost;
 import com.timxs.bbs.query.BbsQueryService;
+import com.timxs.bbs.service.BbsCommentAdminService;
 import com.timxs.bbs.service.BbsPostService;
 import com.timxs.bbs.service.BbsSettings;
+import com.timxs.bbs.service.BestAnswerParam;
 import com.timxs.bbs.service.ContentUpdateParam;
 import com.timxs.bbs.service.PostRequest;
 import com.timxs.bbs.service.RevertSnapshotParam;
-import java.util.Map;
 import com.timxs.bbs.util.BbsPageRequests;
+import com.timxs.bbs.vo.BbsCommentAdminVo;
 import com.timxs.bbs.vo.BbsContentVo;
 import com.timxs.bbs.vo.BbsPostVo;
+import com.timxs.bbs.vo.BbsReplyAdminVo;
 import com.timxs.bbs.vo.BbsSnapshotDto;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.webflux.core.fn.SpringdocRouteBuilder;
 import org.springframework.http.HttpStatus;
@@ -57,6 +62,7 @@ public class BbsUcEndpoint implements CustomEndpoint {
     private final BbsPostService postService;
     private final BbsQueryService queryService;
     private final BbsSettings settings;
+    private final BbsCommentAdminService commentAdminService;
 
     @Override
     public RouterFunction<ServerResponse> endpoint() {
@@ -91,6 +97,22 @@ public class BbsUcEndpoint implements CustomEndpoint {
                         .description("取我的某篇帖子（含工作草稿正文；越权 403）")
                         .parameter(nameParam())
                         .response(responseBuilder().implementation(BbsPostVo.class)))
+                .GET("/bbsposts/{name}/comments", this::listMyComments, builder -> builder
+                        .operationId("ListMyBbsPostComments").tag(TAG)
+                        .description("我的帖子公开可见评论列表（已通过且未隐藏；越权 403）")
+                        .parameter(nameParam()).parameter(pageParam()).parameter(sizeParam())
+                        .parameter(queryParam("keyword"))
+                        .parameter(queryParam("owner")).parameter(queryParam("sort"))
+                        .response(responseBuilder().implementation(
+                                ListResult.generateGenericClass(BbsCommentAdminVo.class))))
+                .GET("/comments/{commentName}/replies", this::listMyCommentReplies,
+                        builder -> builder.operationId("ListMyBbsPostCommentReplies").tag(TAG)
+                                .description("我的帖子某条评论的公开可见回复列表"
+                                        + "（已通过且未隐藏；评论须属于自己的社区帖，越权 403）")
+                                .parameter(commentNameParam())
+                                .parameter(pageParam()).parameter(sizeParam())
+                                .response(responseBuilder().implementation(
+                                        ListResult.generateGenericClass(BbsReplyAdminVo.class))))
                 .GET("/bbsposts/{name}/head-content", this::getHeadContent,
                         builder -> builder.operationId("GetMyBbsPostHeadContent").tag(TAG)
                                 .description("取我的帖子工作版本正文")
@@ -169,8 +191,16 @@ public class BbsUcEndpoint implements CustomEndpoint {
                         .parameter(nameParam()))
                 .PUT("/bbsposts/{name}/unsolve", this::unsolveMine, builder -> builder
                         .operationId("UnsolveMyBbsPost").tag(TAG)
-                        .description("取消我的问答帖已解决标记（越权 403，仅问答帖）")
+                        .description("取消我的问答帖已解决标记（越权 403，仅问答帖；同步清掉最佳答案）")
                         .parameter(nameParam()))
+                .PUT("/bbsposts/{name}/best-answer", this::setBestAnswerMine, builder -> builder
+                        .operationId("SetMyBbsPostBestAnswer").tag(TAG)
+                        .description("设 / 取消我的问答帖最佳答案（commentName 空=取消；锁定帖作者不可改）")
+                        .parameter(nameParam())
+                        .requestBody(requestBodyBuilder().content(contentBuilder()
+                                .schema(schemaBuilder()
+                                        .implementation(BestAnswerParam.class))))
+                        .response(responseBuilder().implementation(BbsPost.class)))
                 .DELETE("/bbsposts/{name}", this::deleteMine, builder -> builder
                         .operationId("DeleteMyBbsPost").tag(TAG)
                         .description("删除我的帖子（越权 403；移入回收站，管理员可恢复）")
@@ -220,6 +250,29 @@ public class BbsUcEndpoint implements CustomEndpoint {
                         postService.getOwned(request.pathVariable("name"), username))
                 .flatMap(queryService::assembleEditingDetail)
                 .flatMap(vo -> ServerResponse.ok().bodyValue(vo));
+    }
+
+    private Mono<ServerResponse> listMyComments(ServerRequest request) {
+        return currentUsername()
+                .flatMap(username -> commentAdminService.listCommentsOwned(
+                        request.pathVariable("name"),
+                        username,
+                        BbsPageRequests.page(request, 1),
+                        BbsPageRequests.size(request, 20, BbsPageRequests.MAX_UC),
+                        request.queryParam("keyword").orElse(null),
+                        request.queryParam("owner").orElse(null),
+                        request.queryParam("sort").orElse(null)))
+                .flatMap(result -> ServerResponse.ok().bodyValue(result));
+    }
+
+    private Mono<ServerResponse> listMyCommentReplies(ServerRequest request) {
+        return currentUsername()
+                .flatMap(username -> commentAdminService.listRepliesOwned(
+                        request.pathVariable("commentName"),
+                        username,
+                        BbsPageRequests.page(request, 1),
+                        BbsPageRequests.size(request, 20, BbsPageRequests.MAX_UC)))
+                .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 
     private Mono<ServerResponse> createPost(ServerRequest request) {
@@ -325,6 +378,17 @@ public class BbsUcEndpoint implements CustomEndpoint {
         return currentUsername()
                 .flatMap(username -> postService.setSolvedOwned(
                         request.pathVariable("name"), username, false))
+                .flatMap(post -> ServerResponse.ok().bodyValue(post));
+    }
+
+    private Mono<ServerResponse> setBestAnswerMine(ServerRequest request) {
+        return Mono.zip(request.bodyToMono(BestAnswerParam.class)
+                                .defaultIfEmpty(new BestAnswerParam(null)),
+                        currentUsername())
+                .flatMap(tuple -> postService.setBestAnswer(
+                        request.pathVariable("name"),
+                        tuple.getT1().commentName(),
+                        tuple.getT2()))
                 .flatMap(post -> ServerResponse.ok().bodyValue(post));
     }
 

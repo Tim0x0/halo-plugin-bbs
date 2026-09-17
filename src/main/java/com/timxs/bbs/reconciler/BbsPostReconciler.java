@@ -4,6 +4,7 @@ import com.timxs.bbs.event.BbsPostChangedEvent;
 import com.timxs.bbs.extension.BbsCategory;
 import com.timxs.bbs.extension.BbsPost;
 import com.timxs.bbs.search.BbsPostDocumentsProvider;
+import com.timxs.bbs.service.BbsCommentNotificationService;
 import com.timxs.bbs.service.BbsModerationNotificationService;
 import com.timxs.bbs.service.BbsModerationRecordService;
 import com.timxs.bbs.service.BbsPostContentService;
@@ -62,6 +63,8 @@ public class BbsPostReconciler implements Reconciler<Reconciler.Request> {
     static final String CATEGORY_COUNT_STATE_ANNO = "bbs.timxs.com/category-count-state";
     /** 会影响 Halo 搜索文档的发布态指纹。 */
     static final String SEARCH_INDEX_STATE_ANNO = "bbs.timxs.com/search-index-state";
+    /** 作者已订阅审核结果与新评论通知（对齐官方：加保护时订一次，标记在不再订）。 */
+    static final String NOTIFICATIONS_SUBSCRIBED_ANNO = "bbs.timxs.com/notifications-subscribed";
     private static final Duration INITIALIZATION_GRACE = Duration.ofSeconds(30);
 
     private final ExtensionClient client;
@@ -70,17 +73,20 @@ public class BbsPostReconciler implements Reconciler<Reconciler.Request> {
     private final BbsPostContentService contentService;
     private final BbsModerationRecordService moderationRecordService;
     private final BbsModerationNotificationService moderationNotificationService;
+    private final BbsCommentNotificationService commentNotificationService;
 
     public BbsPostReconciler(ExtensionClient client, ApplicationEventPublisher eventPublisher,
             BbsCountService countService, BbsPostContentService contentService,
             BbsModerationRecordService moderationRecordService,
-            BbsModerationNotificationService moderationNotificationService) {
+            BbsModerationNotificationService moderationNotificationService,
+            BbsCommentNotificationService commentNotificationService) {
         this.client = client;
         this.eventPublisher = eventPublisher;
         this.countService = countService;
         this.contentService = contentService;
         this.moderationRecordService = moderationRecordService;
         this.moderationNotificationService = moderationNotificationService;
+        this.commentNotificationService = commentNotificationService;
     }
 
     @Override
@@ -162,12 +168,34 @@ public class BbsPostReconciler implements Reconciler<Reconciler.Request> {
             }
         }
 
-        // 作者订阅审核结果（幂等）。失败不挡调和；触发通知时会再订一次兜底。
-        try {
-            moderationNotificationService.subscribe(post).block(Duration.ofSeconds(5));
-        } catch (RuntimeException error) {
-            log.warn("Failed to subscribe BBS moderation notifications for {}",
-                    request.name(), error);
+        // 对齐官方评论：首次调和订一次，annotation 防重。失败不打标记、不挡调和；
+        // 触发通知时会再订一次兜底（见各 NotificationService.emit）。
+        if (!annotations.containsKey(NOTIFICATIONS_SUBSCRIBED_ANNO)) {
+            boolean subscribed = true;
+            try {
+                moderationNotificationService.subscribe(post).block(Duration.ofSeconds(5));
+            } catch (RuntimeException error) {
+                subscribed = false;
+                log.warn("Failed to subscribe BBS moderation notifications for {}",
+                        request.name(), error);
+            }
+            try {
+                commentNotificationService.subscribe(post).block(Duration.ofSeconds(5));
+            } catch (RuntimeException error) {
+                subscribed = false;
+                log.warn("Failed to subscribe BBS new-comment notifications for {}",
+                        request.name(), error);
+            }
+            if (subscribed) {
+                try {
+                    OptimisticUpdates.update(client, BbsPost.class, request.name(), latest ->
+                            MetadataUtil.nullSafeAnnotations(latest)
+                                    .put(NOTIFICATIONS_SUBSCRIBED_ANNO, "true"));
+                } catch (OptimisticLockingFailureException e) {
+                    return Result.requeue(Duration.ofMillis(200));
+                }
+                return Result.requeue(Duration.ofMillis(100));
+            }
         }
 
         if (hasPendingModerationRecord(annotations)) {
