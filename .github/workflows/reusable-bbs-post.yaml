@@ -153,14 +153,28 @@ jobs:
             | sed -E 's/[[:space:]_]+/-/g; s/[^a-z0-9-]//g; s/-{2,}/-/g; s/^-+//; s/-+$//')
           [ -n "$SLUG" ] || SLUG="release-$(date +%s)"
 
-          # 正文：release notes（Markdown）→ HTML，前后拼上 release 链接与附件下载
+          # 正文：release notes（Markdown）→ HTML，前后拼上 release 链接与附件下载。
+          # 外链新标签打开；rel 防新页拿到 window.opener。服务端白名单保留 a 的 target / rel。
           jq -r '.body // ""' release.json > release.md
           pandoc -f gfm -t html release.md -o body.html
-          jq -r '"<p>Release 页面：<a href=\"" + .html_url + "\">" + .tag_name + "</a></p>"' \
+          python3 - <<'PY'
+from pathlib import Path
+import re
+html = Path("body.html").read_text(encoding="utf-8")
+def add_blank(m):
+    tag = m.group(0)
+    if re.search(r'\btarget=', tag, re.I):
+        return tag
+    return tag[:-1] + ' target="_blank" rel="noopener noreferrer">'
+html = re.sub(r'<a\b[^>]*>', add_blank, html, flags=re.I)
+Path("body.html").write_text(html, encoding="utf-8")
+PY
+          jq -r '"<p>Release 页面：<a href=\"" + .html_url + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + .tag_name + "</a></p>"' \
             release.json > intro.html
           jq -r 'if (.assets | length) > 0
                  then "<h2>下载</h2>\n<ul>" +
-                      ([.assets[] | "<li><a href=\"" + .browser_download_url + "\">"
+                      ([.assets[] | "<li><a href=\"" + .browser_download_url
+                        + "\" target=\"_blank\" rel=\"noopener noreferrer\">"
                         + .name + "</a></li>"] | join("")) + "</ul>"
                  else "" end' release.json > assets.html
           cat intro.html body.html assets.html > content.html
