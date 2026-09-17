@@ -157,18 +157,9 @@ jobs:
           # 外链新标签打开；rel 防新页拿到 window.opener。服务端白名单保留 a 的 target / rel。
           jq -r '.body // ""' release.json > release.md
           pandoc -f gfm -t html release.md -o body.html
-          python3 - <<'PY'
-from pathlib import Path
-import re
-html = Path("body.html").read_text(encoding="utf-8")
-def add_blank(m):
-    tag = m.group(0)
-    if re.search(r'\btarget=', tag, re.I):
-        return tag
-    return tag[:-1] + ' target="_blank" rel="noopener noreferrer">'
-html = re.sub(r'<a\b[^>]*>', add_blank, html, flags=re.I)
-Path("body.html").write_text(html, encoding="utf-8")
-PY
+          # 正文里 pandoc 从 Markdown 转出的 <a> 不含 target，一律新标签打开
+          sed -E 's/<a /<a target="_blank" rel="noopener noreferrer" /g' \
+            body.html > body.linked.html && mv body.linked.html body.html
           jq -r '"<p>Release 页面：<a href=\"" + .html_url + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + .tag_name + "</a></p>"' \
             release.json > intro.html
           jq -r 'if (.assets | length) > 0
