@@ -4,8 +4,10 @@
   'use strict';
 
   /* 明暗：auto 跟随系统，light / dark 手动锁定。顶栏按钮三图标轮换
-     （跟随系统 → 浅色 → 深色）。只切 BBS 自己的 --b-*，不改评论插件编辑器。
-     须在首屏样式前写 data-bbs-theme，见 bbs.html / bbs_post.html 内联兜底。 */
+     （跟随系统 → 浅色 → 深色）。data-bbs-theme 切 BBS 的 --b-*；
+     data-color-scheme 是官方评论组件（plugin-comment-widget）的约定，
+     不同步的话评论区会停在浅色。须在首屏样式前写这两个属性，
+     见 bbs.html / bbs_post.html 内联兜底。 */
   var THEME_KEY = 'bbs-theme';
   var THEME_ORDER = ['auto', 'light', 'dark'];
   var THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
@@ -21,6 +23,9 @@
       root.removeAttribute('data-bbs-theme');
       mode = 'auto';
     }
+    /* 评论组件认 html/body 的 data-color-scheme（auto/light/dark），
+       以及 .dark / .color-scheme-dark。只写 data-bbs-theme 它看不见。 */
+    root.setAttribute('data-color-scheme', mode);
     document.querySelectorAll('[data-bbs-theme-icon]').forEach(function (el) {
       /* SVGElement 没有 hidden 这个 JS 属性，赋值只挂了个无效属性、[hidden]
          选择器匹配不到。用 set/removeAttribute 操作特性本身。 */

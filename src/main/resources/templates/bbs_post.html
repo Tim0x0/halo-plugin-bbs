@@ -16,7 +16,13 @@
     (function () {
       try {
         var m = localStorage.getItem('bbs-theme');
-        if (m === 'light' || m === 'dark') document.documentElement.setAttribute('data-bbs-theme', m);
+        var root = document.documentElement;
+        if (m === 'light' || m === 'dark') {
+          root.setAttribute('data-bbs-theme', m);
+          root.setAttribute('data-color-scheme', m);
+        } else {
+          root.setAttribute('data-color-scheme', 'auto');
+        }
       } catch (e) {}
     })();
   </script>
