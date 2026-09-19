@@ -18,7 +18,8 @@
 #   - 帖子别名固定为 release-<tag 归一>（如 v1.2.3 → release-v123），以此识别「同一版本的帖子」：
 #     删了 release 重发、手动重跑都只会更新已有帖，不会刷屏。
 #   - 状态智能区分：正式 release → 直接发布；prerelease → 存草稿（status 入参可覆盖）。
-#   - 正文由 release notes（Markdown）经 pandoc 转 HTML 后提交，服务端会再过白名单净化。
+#   - 正文由 release notes（Markdown）经 GitHub Markdown API 转 HTML 后提交，服务端会再过白名单净化。
+#     用 GitHub 自己渲染是为了保留 #123 / @user 这类 GitHub 扩展语法的链接（pandoc 不认识）。
 #   - 与调用方的 CD 工作流同时被 release 事件触发时，轮询等待 CD 上传完 jar 资产再拼下载链接。
 
 name: 同步 BBS 公告
@@ -96,9 +97,6 @@ jobs:
             exit 1
           fi
 
-      - name: 安装 pandoc
-        run: command -v pandoc >/dev/null || (sudo apt-get update && sudo apt-get install -y pandoc)
-
       - name: 准备 Release 内容与标题 / 状态 / 别名
         env:
           GH_TOKEN: ${{ github.token }}
@@ -154,11 +152,23 @@ jobs:
           [ -n "$SLUG" ] || SLUG="release-$(date +%s)"
 
           # 正文：release notes（Markdown）→ HTML，前后拼上 release 链接与附件下载。
+          # 交给 GitHub Markdown API 渲染（context 指向调用方仓库），和 Release 页面所见一致：
+          # #123 / owner/repo#123 → issue 链接，@user → 用户主页，裸 URL → 链接，:emoji: → 表情。
+          # pandoc 只认标准 Markdown，这些 GitHub 扩展语法会退化成纯文本。
+          # 响应里多出的 class / data-* 属性由服务端白名单剥掉，无需在此清理。
           # 外链新标签打开；rel 防新页拿到 window.opener。服务端白名单保留 a 的 target / rel。
-          jq -r '.body // ""' release.json > release.md
-          pandoc -f gfm -t html release.md -o body.html
-          # 正文里 pandoc 从 Markdown 转出的 <a> 不含 target，一律新标签打开
-          sed -E 's/<a /<a target="_blank" rel="noopener noreferrer" /g' \
+          jq --arg repo "$GITHUB_REPOSITORY" \
+            '{text: (.body // ""), mode: "gfm", context: $repo}' release.json > markdown.json
+          HTTP=$(curl -s -o body.html -w '%{http_code}' -X POST "$GITHUB_API_URL/markdown" \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" --data @markdown.json)
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::渲染 release notes 失败（GitHub Markdown API HTTP $HTTP）：$(cat body.html)"
+            exit 1
+          fi
+          # 正文里的 <a> 一律新标签打开：先剥掉已有的 target / rel（GitHub 给裸 URL 自动加
+          # rel="nofollow"），避免同名属性重复，再统一补上我们的
+          sed -E 's/ (target|rel)="[^"]*"//g; s/<a /<a target="_blank" rel="noopener noreferrer" /g' \
             body.html > body.linked.html && mv body.linked.html body.html
           jq -r '"<p>Release 页面：<a href=\"" + .html_url + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + .tag_name + "</a></p>"' \
             release.json > intro.html
