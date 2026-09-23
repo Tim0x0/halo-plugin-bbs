@@ -66,6 +66,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # 等 jar 资产最多 8 分钟，加上几次 API 调用；超出即视为卡住，别占着 runner
+    timeout-minutes: 20
+    # 显式 bash：默认 shell 只开 -e，指定后再开 pipefail，管道中段出错也能停下
+    defaults:
+      run:
+        shell: bash
     # 同一 tag 的操作串行，避免并发下「查无此帖 → 双双创建」
     concurrency:
       group: bbs-release-post-${{ inputs.tag || github.event.release.tag_name }}
@@ -159,16 +165,20 @@ jobs:
           # 外链新标签打开；rel 防新页拿到 window.opener。服务端白名单保留 a 的 target / rel。
           jq --arg repo "$GITHUB_REPOSITORY" \
             '{text: (.body // ""), mode: "gfm", context: $repo}' release.json > markdown.json
-          HTTP=$(curl -s -o body.html -w '%{http_code}' -X POST "$GITHUB_API_URL/markdown" \
+          HTTP=$(curl -sS -o body.html -w '%{http_code}' -X POST "$GITHUB_API_URL/markdown" \
             -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
             -H "Content-Type: application/json" --data @markdown.json)
           if [ "$HTTP" != "200" ]; then
             echo "::error::渲染 release notes 失败（GitHub Markdown API HTTP $HTTP）：$(cat body.html)"
             exit 1
           fi
-          # 正文里的 <a> 一律新标签打开：先剥掉已有的 target / rel（GitHub 给裸 URL 自动加
-          # rel="nofollow"），避免同名属性重复，再统一补上我们的
-          sed -E 's/ (target|rel)="[^"]*"//g; s/<a /<a target="_blank" rel="noopener noreferrer" /g' \
+          # 正文里的 <a> 一律新标签打开：先剥掉已有的 target / rel（GitHub 给裸链加的
+          # rel="nofollow"），避免同名属性重复，再统一补上我们的。剥除只在 <a …> 标签内匹配
+          # （:a / ta 循环到标签内没有为止）——行内代码里的引号 GitHub 不转义，全局替换会把
+          # `<a rel="…">` 这类示例文本削掉
+          sed -E -e ':a' -e 's/(<a [^>]*) (target|rel)="[^"]*"/\1/' -e 'ta' \
+                 -e 's/<a /<a target="_blank" rel="noopener noreferrer" /g' \
             body.html > body.linked.html && mv body.linked.html body.html
           jq -r '"<p>Release 页面：<a href=\"" + .html_url + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + .tag_name + "</a></p>"' \
             release.json > intro.html
@@ -213,7 +223,7 @@ jobs:
 
           # 按别名认领同一版本的已有帖（keyword 可匹配 slug，服务端 listConsole 支持；
           # 不依赖标题，标题被人为改过也能认出来）。回收站内的帖不在列表，等同于不存在。
-          HTTP=$(curl -s -o resp.json -w '%{http_code}' -G "$API/bbsposts" \
+          HTTP=$(curl -sS -o resp.json -w '%{http_code}' -G "$API/bbsposts" \
             -H "Authorization: Bearer $BBS_POST_PAT" \
             --data-urlencode "keyword=$SLUG" --data-urlencode "size=50")
           if [ "$HTTP" != "200" ]; then
@@ -227,14 +237,14 @@ jobs:
 
           if [ -z "$EXISTING" ]; then
             echo "未找到 $SLUG 对应的帖子，创建新帖（publish=$PUBLISH）"
-            HTTP=$(curl -s -o resp.json -w '%{http_code}' -X POST \
+            HTTP=$(curl -sS -o resp.json -w '%{http_code}' -X POST \
               "$API/bbsposts?publish=$PUBLISH" \
               -H "Authorization: Bearer $BBS_POST_PAT" -H "Content-Type: application/json" \
               --data @payload.json)
             ACTION="created"
           else
             echo "找到已有帖子 $EXISTING（状态 $EXISTING_PHASE），执行更新"
-            HTTP=$(curl -s -o resp.json -w '%{http_code}' -X PUT \
+            HTTP=$(curl -sS -o resp.json -w '%{http_code}' -X PUT \
               "$API/bbsposts/$EXISTING" \
               -H "Authorization: Bearer $BBS_POST_PAT" -H "Content-Type: application/json" \
               --data @payload.json)
@@ -242,7 +252,7 @@ jobs:
             # 已发布帖的 PUT 只写入工作稿，须再调 publish 提升为前台版本；
             # 草稿帖 + 目标发布同样靠这一步提升。publish 幂等安全。
             if [ "$HTTP" = "200" ] && [ "$PUBLISH" = "true" ]; then
-              HTTP=$(curl -s -o resp.json -w '%{http_code}' -X PUT \
+              HTTP=$(curl -sS -o resp.json -w '%{http_code}' -X PUT \
                 "$API/bbsposts/$EXISTING/publish" \
                 -H "Authorization: Bearer $BBS_POST_PAT")
             elif [ "$HTTP" = "200" ] && [ "$PUBLISH" = "false" ] \
