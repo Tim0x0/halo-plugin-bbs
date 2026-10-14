@@ -15,7 +15,7 @@
 #   PUT  /apis/console.api.bbs.timxs.com/v1alpha1/bbsposts/{name}/publish  提升工作稿为前台版本
 #
 # 行为约定：
-#   - 帖子别名固定为 release-<tag 归一>（如 v1.2.3 → release-v123），以此识别「同一版本的帖子」：
+#   - 帖子别名固定为 <仓库名>-<tag 归一>（如 halo-plugin-bbs + v1.2.3 → halo-plugin-bbs-v123），以此识别「同一版本的帖子」：
 #     删了 release 重发、手动重跑都只会更新已有帖，不会刷屏。
 #   - 状态智能区分：正式 release → 直接发布；prerelease → 存草稿（status 入参可覆盖）。
 #   - 正文由 release notes（Markdown）经 GitHub Markdown API 转 HTML 后提交，服务端会再过白名单净化。
@@ -153,9 +153,10 @@ jobs:
 
           # 别名归一对齐服务端 slugify：小写、空白/下划线转连字符、只留字母数字与连字符。
           # 注意服务端同样剥掉点号（v1.2.3 → v123），两侧必须一致才能互相认领。
-          SLUG=$(printf 'release-%s' "$TAG" | tr '[:upper:]' '[:lower:]' \
+          # 前缀取仓库名，多个仓库共用同一站点时各自认领各自的帖。
+          SLUG=$(printf '%s-%s' "${GITHUB_REPOSITORY#*/}" "$TAG" | tr '[:upper:]' '[:lower:]' \
             | sed -E 's/[[:space:]_]+/-/g; s/[^a-z0-9-]//g; s/-{2,}/-/g; s/^-+//; s/-+$//')
-          [ -n "$SLUG" ] || SLUG="release-$(date +%s)"
+          [ -n "$SLUG" ] || SLUG="${GITHUB_REPOSITORY#*/}-$(date +%s)"
 
           # 正文：release notes（Markdown）→ HTML，前后拼上 release 链接与附件下载。
           # 交给 GitHub Markdown API 渲染（context 指向调用方仓库），和 Release 页面所见一致：

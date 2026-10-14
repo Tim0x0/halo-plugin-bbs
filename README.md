@@ -238,7 +238,7 @@ https://你的站点/apis/api.bbs.timxs.com/v1alpha1/categories
 发帖行为：
 
 - **状态**：正式 release → 直接发布；预发布（prerelease）→ 存草稿；`status` 入参可强制
-- **不重复发帖**：帖子别名固定为 `release-<tag>`（如 `v1.2.3` → `release-v123`）。删了 release 重发、手动重跑都只更新已有帖；回收站内的帖视为不存在，会新建
+- **不重复发帖**：帖子别名固定为 `<仓库名>-<tag>`（如 `halo-plugin-bbs` + `v1.2.3` → `halo-plugin-bbs-v123`）。删了 release 重发、手动重跑都只更新已有帖；回收站内的帖视为不存在，会新建
 - **手动运行**：Actions → 同步 BBS 公告 → Run workflow，填写 tag。按 tag 读取该 release 当前的说明与附件，其余与自动触发一致；用于补发接入前的版本，或在编辑 release 说明后同步到帖子（编辑说明不触发自动发帖）
 - **内容**：标题默认 `<tag> 发布说明`（`tag` 来自 git tag，不是 GitHub Release 标题）；配了 `BBS_PROJECT_NAME` 则按原样作为前缀拼成 `{前缀} {tag} 发布说明`。正文前后自动拼 release 页面链接与附件下载列表（会等待 CD 上传完 jar，超时则降级为不带下载链接）
 

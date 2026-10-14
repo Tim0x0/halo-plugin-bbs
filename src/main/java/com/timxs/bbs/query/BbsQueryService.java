@@ -147,7 +147,7 @@ public class BbsQueryService {
         }
         Condition condition = equal("spec.deleted", deleted);
         if (StringUtils.isNotBlank(keyword)) {
-            // 别名同属匹配范围：外部自动化（如 GitHub Actions 按 release-<tag>
+            // 别名同属匹配范围：外部自动化（如 GitHub Actions 按 <仓库名>-<tag>
             // 认领已有帖）靠它精确定位，标题可被人为改动而别名恒定。
             condition = append(condition, or(
                     contains("spec.title", keyword),
